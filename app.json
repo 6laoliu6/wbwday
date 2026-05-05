@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "今日立愿",
+    "slug": "jinri-liyuan",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "jinriliyuan",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "android": {
+      "package": "com.wang.jinriliyuan",
+      "versionCode": 1
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "允许今日立愿访问相册，用于选择还愿照片。",
+          "cameraPermission": "允许今日立愿使用相机，用于拍照还愿。",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d4269d2c-8a28-4bc6-9b06-39d266aa0370"
+      }
+    }
+  }
+}
