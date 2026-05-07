@@ -16,15 +16,18 @@ import {
 import { PlanningDraftCard } from '@/components/PlanningDraftCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { VoiceInputButton } from '@/components/VoiceInputButton';
-import { colors } from '@/constants/theme';
 import { createTasks } from '@/storage/taskRepository';
+import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
 import type { TaskDraft } from '@/types';
+import { hapticError, hapticSelection, hapticSuccess } from '@/utils/haptics';
 import { parsePlanningText } from '@/utils/parsePlanningText';
 
 const exampleText =
   '例如：今天我要写完报告初稿，至少 1500 字；下午健身 40 分钟；晚上整理房间，把桌面清空。';
 
 export default function MorningPlanScreen() {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const navigation = useNavigation();
   const allowLeaveRef = useRef(false);
   const [input, setInput] = useState('');
@@ -77,6 +80,7 @@ export default function MorningPlanScreen() {
     }
 
     setDrafts(nextDrafts);
+    void hapticSelection();
   }, [input]);
 
   const updateDraft = useCallback((nextDraft: TaskDraft) => {
@@ -116,13 +120,15 @@ export default function MorningPlanScreen() {
 
       allowLeaveRef.current = true;
       setDrafts([]);
-      Alert.alert('今日立愿已保存。', undefined, [
+      void hapticSuccess();
+      Alert.alert('WBWday 已保存今天的计划。', undefined, [
         {
           text: '好',
           onPress: () => router.replace('/'),
         },
       ]);
     } catch {
+      void hapticError();
       Alert.alert('保存失败', '任务没有保存成功，请稍后再试。');
       setSaving(false);
     }
@@ -135,24 +141,34 @@ export default function MorningPlanScreen() {
         style={styles.keyboard}
       >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>今天想完成什么？</Text>
-          <Text style={styles.description}>把今天想做的事写下来，我会帮你拆成任务卡。</Text>
+          <View style={styles.hero}>
+            <View style={styles.heroDot} />
+            <Text style={styles.kicker}>MORNING SETUP</Text>
+            <Text style={styles.title}>今天想完成什么？</Text>
+            <Text style={styles.description}>把今天想做的事写下来，我会帮你拆成任务卡。</Text>
+          </View>
 
-          <TextInput
-            multiline
-            onChangeText={setInput}
-            placeholder={exampleText}
-            placeholderTextColor={colors.muted}
-            style={styles.planningInput}
-            textAlignVertical="top"
-            value={input}
-          />
-
-          <Text style={styles.example}>{exampleText}</Text>
+          <View style={styles.inputPanel}>
+            <TextInput
+              multiline
+              onChangeText={setInput}
+              placeholder={exampleText}
+              placeholderTextColor={theme.textMuted}
+              selectionColor={theme.primary}
+              style={styles.planningInput}
+              textAlignVertical="top"
+              value={input}
+            />
+            <Text style={styles.example}>{exampleText}</Text>
+          </View>
 
           <View style={styles.actionRow}>
-            <VoiceInputButton />
-            <PrimaryButton onPress={generateDrafts}>生成任务</PrimaryButton>
+            <View style={styles.actionItem}>
+              <VoiceInputButton />
+            </View>
+            <View style={styles.actionItem}>
+              <PrimaryButton onPress={generateDrafts}>生成任务</PrimaryButton>
+            </View>
           </View>
 
           {hasGeneratedDrafts ? (
@@ -174,7 +190,7 @@ export default function MorningPlanScreen() {
 
           {hasGeneratedDrafts ? (
             <View style={styles.saveArea}>
-              <PrimaryButton disabled={!canSave || saving} onPress={saveDrafts}>
+              <PrimaryButton disabled={!canSave || saving} onPress={saveDrafts} size="large">
                 {saving ? '保存中' : '保存到今日'}
               </PrimaryButton>
             </View>
@@ -185,71 +201,107 @@ export default function MorningPlanScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  keyboard: {
-    flex: 1,
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 44,
-  },
-  title: {
-    color: colors.ink,
-    fontSize: 28,
-    fontWeight: '900',
-    lineHeight: 36,
-    marginBottom: 8,
-  },
-  description: {
-    color: colors.muted,
-    fontSize: 16,
-    lineHeight: 23,
-    marginBottom: 18,
-  },
-  planningInput: {
-    minHeight: 170,
-    borderColor: colors.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    color: colors.ink,
-    fontSize: 17,
-    lineHeight: 25,
-    padding: 16,
-  },
-  example: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 10,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
-  },
-  previewHeader: {
-    alignItems: 'flex-end',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    marginTop: 24,
-  },
-  previewTitle: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  previewHint: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  saveArea: {
-    marginTop: 4,
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    keyboard: {
+      flex: 1,
+    },
+    content: {
+      padding: spacing.lg,
+      paddingBottom: spacing.xl,
+    },
+    hero: {
+      overflow: 'hidden',
+      borderColor: theme.border,
+      borderRadius: radius.xlarge,
+      borderWidth: 1,
+      backgroundColor: theme.surface,
+      marginBottom: spacing.md,
+      padding: spacing.xl,
+    },
+    heroDot: {
+      position: 'absolute',
+      right: -24,
+      top: -30,
+      width: 112,
+      height: 112,
+      borderRadius: 56,
+      backgroundColor: theme.accent,
+      opacity: 0.78,
+    },
+    kicker: {
+      ...typography.micro,
+      color: theme.primary,
+      fontWeight: '900',
+      marginBottom: spacing.xs,
+    },
+    title: {
+      ...typography.title,
+      color: theme.text,
+      fontWeight: '900',
+      marginBottom: spacing.sm,
+    },
+    description: {
+      ...typography.body,
+      color: theme.textMuted,
+      lineHeight: 22,
+      maxWidth: '84%',
+    },
+    inputPanel: {
+      borderColor: theme.border,
+      borderRadius: radius.xlarge,
+      borderWidth: 1,
+      backgroundColor: theme.surface,
+      padding: spacing.md,
+    },
+    planningInput: {
+      minHeight: 176,
+      borderColor: theme.border,
+      borderRadius: radius.large,
+      borderWidth: 1,
+      backgroundColor: theme.surfaceAlt,
+      color: theme.text,
+      fontSize: 17,
+      lineHeight: 25,
+      padding: spacing.md,
+    },
+    example: {
+      ...typography.caption,
+      color: theme.textMuted,
+      lineHeight: 19,
+      marginTop: spacing.sm,
+    },
+    actionRow: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginTop: spacing.md,
+    },
+    actionItem: {
+      flex: 1,
+    },
+    previewHeader: {
+      alignItems: 'flex-end',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: spacing.sm,
+      marginTop: spacing.xl,
+    },
+    previewTitle: {
+      ...typography.section,
+      color: theme.text,
+      fontWeight: '900',
+    },
+    previewHint: {
+      ...typography.caption,
+      color: theme.textMuted,
+      fontWeight: '900',
+    },
+    saveArea: {
+      marginTop: spacing.xs,
+    },
+  });
+}

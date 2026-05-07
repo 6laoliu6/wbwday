@@ -1,12 +1,19 @@
 import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
-import { colors } from '@/constants/theme';
 import { addFocusSession } from '@/storage/focusRepository';
 import { addFocusSecondsToTask, getTaskById } from '@/storage/taskRepository';
+import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
 import type { FocusMode, Task } from '@/types';
+import {
+  hapticError,
+  hapticLight,
+  hapticSelection,
+  hapticSuccess,
+  hapticWarning,
+} from '@/utils/haptics';
 import { formatTimer } from '@/utils/time';
 
 const POMODORO_SECONDS = 25 * 60;
@@ -20,6 +27,8 @@ const focusModeLabels: Record<FocusMode, string> = {
 };
 
 export default function FocusScreen() {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const params = useLocalSearchParams<{ taskId: string }>();
   const taskId = params.taskId;
   const [task, setTask] = useState<Task | undefined>();
@@ -68,6 +77,14 @@ export default function FocusScreen() {
     [elapsedSeconds, mode],
   );
 
+  const progress = useMemo(() => {
+    if (mode === 'pomodoro') {
+      return Math.min(1, elapsedSeconds / POMODORO_SECONDS);
+    }
+
+    return Math.min(1, elapsedSeconds / (60 * 60));
+  }, [elapsedSeconds, mode]);
+
   const saveSession = useCallback(
     async (durationSeconds: number, completed: boolean) => {
       if (!taskId || saving) {
@@ -88,6 +105,7 @@ export default function FocusScreen() {
           completed,
         });
         await addFocusSecondsToTask(taskId, safeDuration);
+        void hapticSuccess();
         Alert.alert('专注已保存', '本次专注已经记录到任务里。', [
           {
             text: '好',
@@ -95,6 +113,7 @@ export default function FocusScreen() {
           },
         ]);
       } catch {
+        void hapticError();
         Alert.alert('保存失败', '专注记录没有保存成功，请稍后再试。');
         setSaving(false);
       }
@@ -114,7 +133,8 @@ export default function FocusScreen() {
 
     pomodoroCompletedRef.current = true;
     setStatus('paused');
-    Alert.alert('本轮番茄钟完成', '已完成 25 分钟专注，是否保存本轮记录？', [
+    void hapticSuccess();
+    Alert.alert('本轮番茄钟完成', '已经完成 25 分钟专注，是否保存本轮记录？', [
       {
         text: '保存',
         onPress: () => void saveSession(POMODORO_SECONDS, true),
@@ -127,18 +147,21 @@ export default function FocusScreen() {
       return;
     }
 
+    void hapticLight();
     setStartedAt(new Date().toISOString());
     setStatus('running');
   }, [status]);
 
   const pause = useCallback(() => {
     if (status === 'running') {
+      void hapticSelection();
       setStatus('paused');
     }
   }, [status]);
 
   const resume = useCallback(() => {
     if (status === 'paused') {
+      void hapticLight();
       setStatus('running');
     }
   }, [status]);
@@ -147,6 +170,7 @@ export default function FocusScreen() {
     const durationSeconds = mode === 'pomodoro' ? Math.min(elapsedSeconds, POMODORO_SECONDS) : elapsedSeconds;
 
     if (durationSeconds < MIN_SAVE_SECONDS) {
+      void hapticWarning();
       Alert.alert('本次专注时间太短', '少于 5 秒的专注不会保存。', [
         { text: '继续专注', style: 'cancel' },
         {
@@ -163,6 +187,7 @@ export default function FocusScreen() {
   }, [elapsedSeconds, mode, saveSession]);
 
   const abandon = useCallback(() => {
+    void hapticWarning();
     Alert.alert('放弃本次专注？', '本次计时不会保存。', [
       { text: '继续专注', style: 'cancel' },
       {
@@ -176,7 +201,7 @@ export default function FocusScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.center}>
-        <ActivityIndicator color={colors.accent} />
+        <ActivityIndicator color={theme.primary} />
       </SafeAreaView>
     );
   }
@@ -197,55 +222,80 @@ export default function FocusScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.content}>
-        <View style={styles.taskBlock}>
-          <Text style={styles.taskLabel}>当前任务</Text>
+        <View style={styles.hero}>
+          <View style={styles.geometryOne} />
+          <View style={styles.geometryTwo} />
+          <Text style={styles.kicker}>FOCUS CHAMBER</Text>
           <Text style={styles.title}>{task.title}</Text>
           <Text style={styles.criteria}>完成标准：{task.completionCriteria}</Text>
         </View>
 
-        <View style={styles.modeBlock}>
-          <Text style={styles.sectionLabel}>专注模式</Text>
+        <View style={styles.timerPanel}>
           <View style={styles.modeRow}>
-            <PrimaryButton
-              disabled={status !== 'idle'}
-              onPress={() => setMode('normal')}
-              variant={mode === 'normal' ? 'filled' : 'soft'}
-            >
-              普通计时
-            </PrimaryButton>
-            <PrimaryButton
-              disabled={status !== 'idle'}
-              onPress={() => setMode('pomodoro')}
-              variant={mode === 'pomodoro' ? 'filled' : 'soft'}
-            >
-              番茄钟
-            </PrimaryButton>
+            {(['normal', 'pomodoro'] as FocusMode[]).map((nextMode) => {
+              const isActive = mode === nextMode;
+
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={status !== 'idle'}
+                  key={nextMode}
+                  onPress={() => setMode(nextMode)}
+                  style={({ pressed }) => [
+                    styles.modeButton,
+                    isActive ? styles.modeButtonActive : undefined,
+                    status !== 'idle' ? styles.modeButtonDisabled : undefined,
+                    pressed && status === 'idle' ? styles.pressed : undefined,
+                  ]}
+                >
+                  <Text style={[styles.modeText, isActive ? styles.modeTextActive : undefined]}>
+                    {nextMode === 'normal' ? '普通计时' : '番茄钟'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={styles.timerStage}>
+            <Text style={styles.timer}>{formatTimer(displayedSeconds)}</Text>
+            <Text style={styles.timerHint}>{mode === 'pomodoro' ? '剩余时间' : '已专注时间'}</Text>
+          </View>
+
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
           </View>
           <Text style={styles.modeHint}>
-            {status === 'idle' ? `当前：${focusModeLabels[mode]}` : '专注开始后不能切换模式'}
+            {status === 'idle' ? `当前：${focusModeLabels[mode]}` : '专注开始后不切换模式。'}
           </Text>
         </View>
 
-        <View style={styles.timerBlock}>
-          <Text style={styles.timer}>{formatTimer(displayedSeconds)}</Text>
-          <Text style={styles.timerHint}>{mode === 'pomodoro' ? '剩余时间' : '已专注时间'}</Text>
-        </View>
-
         <View style={styles.controls}>
-          {status === 'idle' ? <PrimaryButton onPress={start}>开始</PrimaryButton> : null}
-          {status === 'running' ? <PrimaryButton onPress={pause} variant="soft">暂停</PrimaryButton> : null}
-          {status === 'paused' ? <PrimaryButton onPress={resume}>继续</PrimaryButton> : null}
+          {status === 'idle' ? (
+            <PrimaryButton onPress={start} size="large">
+              开始专注
+            </PrimaryButton>
+          ) : null}
+          {status === 'running' ? (
+            <PrimaryButton onPress={pause} size="large" variant="soft">
+              暂停
+            </PrimaryButton>
+          ) : null}
+          {status === 'paused' ? (
+            <PrimaryButton onPress={resume} size="large">
+              继续
+            </PrimaryButton>
+          ) : null}
           {status !== 'idle' ? (
             <>
               <PrimaryButton disabled={saving} onPress={endFocus} variant="soft">
-                结束专注
+                结束并保存
               </PrimaryButton>
-              <PrimaryButton disabled={saving} onPress={abandon} variant="ghost">
+              <PrimaryButton disabled={saving} onPress={abandon} variant="quiet">
                 放弃本次专注
               </PrimaryButton>
             </>
           ) : (
-            <PrimaryButton onPress={() => router.back()} variant="ghost">
+            <PrimaryButton onPress={() => router.back()} variant="quiet">
               返回
             </PrimaryButton>
           )}
@@ -255,96 +305,169 @@ export default function FocusScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'space-between',
-    padding: 20,
-    paddingBottom: 36,
-  },
-  taskBlock: {
-    borderColor: colors.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    padding: 18,
-  },
-  taskLabel: {
-    color: colors.accentDark,
-    fontSize: 13,
-    fontWeight: '900',
-    marginBottom: 8,
-  },
-  title: {
-    color: colors.ink,
-    fontSize: 24,
-    fontWeight: '900',
-    lineHeight: 32,
-    marginBottom: 10,
-  },
-  criteria: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  modeBlock: {
-    marginTop: 20,
-  },
-  sectionLabel: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: '900',
-    marginBottom: 10,
-  },
-  modeRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  modeHint: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 10,
-  },
-  timerBlock: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 36,
-  },
-  timer: {
-    color: colors.ink,
-    fontSize: 64,
-    fontWeight: '900',
-  },
-  timerHint: {
-    color: colors.muted,
-    fontSize: 15,
-    fontWeight: '800',
-    marginTop: 8,
-  },
-  controls: {
-    gap: 12,
-  },
-  empty: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-  emptyTitle: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: '900',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    center: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.background,
+    },
+    content: {
+      flex: 1,
+      justifyContent: 'space-between',
+      padding: spacing.lg,
+      paddingBottom: spacing.xl,
+    },
+    hero: {
+      minHeight: 170,
+      overflow: 'hidden',
+      borderColor: theme.border,
+      borderRadius: radius.xlarge,
+      borderWidth: 1,
+      backgroundColor: theme.surface,
+      padding: spacing.xl,
+    },
+    geometryOne: {
+      position: 'absolute',
+      right: -42,
+      top: -36,
+      width: 156,
+      height: 156,
+      borderRadius: 78,
+      backgroundColor: theme.accent,
+      opacity: 0.8,
+    },
+    geometryTwo: {
+      position: 'absolute',
+      bottom: -34,
+      right: 28,
+      width: 108,
+      height: 72,
+      borderRadius: radius.large,
+      backgroundColor: theme.primary,
+      opacity: 0.16,
+      transform: [{ rotate: '-10deg' }],
+    },
+    kicker: {
+      ...typography.micro,
+      color: theme.primary,
+      fontWeight: '900',
+      letterSpacing: 0,
+      marginBottom: spacing.sm,
+    },
+    title: {
+      ...typography.title,
+      color: theme.text,
+      fontWeight: '900',
+      lineHeight: 36,
+      marginBottom: spacing.md,
+      maxWidth: '82%',
+    },
+    criteria: {
+      ...typography.body,
+      color: theme.textMuted,
+      lineHeight: 22,
+      maxWidth: '88%',
+    },
+    timerPanel: {
+      borderColor: theme.border,
+      borderRadius: radius.xlarge,
+      borderWidth: 1,
+      backgroundColor: theme.surface,
+      padding: spacing.lg,
+    },
+    modeRow: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginBottom: spacing.xl,
+    },
+    modeButton: {
+      flex: 1,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderColor: theme.border,
+      borderRadius: radius.pill,
+      borderWidth: 1,
+      backgroundColor: theme.surfaceAlt,
+    },
+    modeButtonActive: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primary,
+    },
+    modeButtonDisabled: {
+      opacity: 0.64,
+    },
+    modeText: {
+      ...typography.caption,
+      color: theme.text,
+      fontWeight: '900',
+    },
+    modeTextActive: {
+      color: theme.textOnPrimary,
+    },
+    timerStage: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: spacing.lg,
+    },
+    timer: {
+      color: theme.text,
+      fontSize: 68,
+      fontWeight: '900',
+      lineHeight: 76,
+      letterSpacing: 0,
+    },
+    timerHint: {
+      ...typography.caption,
+      color: theme.textMuted,
+      fontWeight: '900',
+      marginTop: spacing.xs,
+    },
+    progressTrack: {
+      height: 9,
+      overflow: 'hidden',
+      borderRadius: radius.pill,
+      backgroundColor: theme.surfaceAlt,
+      marginTop: spacing.lg,
+    },
+    progressFill: {
+      height: '100%',
+      borderRadius: radius.pill,
+      backgroundColor: theme.accent,
+      minWidth: 8,
+    },
+    modeHint: {
+      ...typography.caption,
+      color: theme.textMuted,
+      fontWeight: '800',
+      lineHeight: 18,
+      marginTop: spacing.md,
+      textAlign: 'center',
+    },
+    controls: {
+      gap: spacing.sm,
+    },
+    pressed: {
+      opacity: 0.84,
+      transform: [{ scale: 0.985 }],
+    },
+    empty: {
+      flex: 1,
+      justifyContent: 'center',
+      padding: spacing.lg,
+    },
+    emptyTitle: {
+      ...typography.section,
+      color: theme.text,
+      fontWeight: '900',
+      marginBottom: spacing.md,
+      textAlign: 'center',
+    },
+  });
+}

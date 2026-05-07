@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,12 +17,18 @@ import {
 } from 'react-native';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
-import { colors } from '@/constants/theme';
 import { completionStatusLabels } from '@/constants/taskText';
 import { deleteProofImage, saveProofImage } from '@/storage/imageStorage';
 import { getLatestCompletionProofByTaskId, saveCompletionProof } from '@/storage/proofRepository';
 import { getTaskById } from '@/storage/taskRepository';
+import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
 import type { CompletionProof, CompletionStatus, Task } from '@/types';
+import {
+  hapticError,
+  hapticSelection,
+  hapticSuccess,
+  hapticWarning,
+} from '@/utils/haptics';
 import { formatFocusDuration, getTaskFocusSeconds } from '@/utils/time';
 
 type SelectedImage = {
@@ -33,6 +39,8 @@ type SelectedImage = {
 const completionStatusOptions: CompletionStatus[] = ['completed', 'partial', 'exceeded'];
 
 export default function ProofScreen() {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const params = useLocalSearchParams<{ taskId: string }>();
   const taskId = params.taskId;
   const [task, setTask] = useState<Task | undefined>();
@@ -94,6 +102,7 @@ export default function ProofScreen() {
     }
 
     setSelectedImage({ uri: result.assets[0].uri, isPersisted: false });
+    void hapticSelection();
   }, []);
 
   const pickImage = useCallback(async () => {
@@ -115,6 +124,12 @@ export default function ProofScreen() {
     }
 
     setSelectedImage({ uri: result.assets[0].uri, isPersisted: false });
+    void hapticSelection();
+  }, []);
+
+  const removeSelectedImage = useCallback(() => {
+    void hapticWarning();
+    setSelectedImage(undefined);
   }, []);
 
   const saveProof = useCallback(
@@ -169,13 +184,15 @@ export default function ProofScreen() {
           ]);
         }
 
-        Alert.alert('还愿已保存。', undefined, [
+        void hapticSuccess();
+        Alert.alert('这一刻，收好啦', '还愿已保存。', [
           {
             text: '好',
             onPress: () => router.replace(`/task/${proof.taskId}` as Href),
           },
         ]);
       } catch {
+        void hapticError();
         Alert.alert('保存失败', '图片或还愿记录没有保存成功，请稍后再试。');
         setSaving(false);
       }
@@ -186,7 +203,7 @@ export default function ProofScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.center}>
-        <ActivityIndicator color={colors.accent} />
+        <ActivityIndicator color={theme.primary} />
       </SafeAreaView>
     );
   }
@@ -211,34 +228,37 @@ export default function ProofScreen() {
         style={styles.keyboard}
       >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={styles.kicker}>兑现今天的承诺</Text>
-          <Text style={styles.title}>{task.title}</Text>
-          <Text style={styles.criteria}>完成标准：{task.completionCriteria}</Text>
-          <Text style={styles.focusText}>累计专注 {formatFocusDuration(getTaskFocusSeconds(task))}</Text>
+          <View style={styles.hero}>
+            <View style={styles.heroMark} />
+            <Text style={styles.kicker}>给今天一个证明</Text>
+            <Text style={styles.title}>{task.title}</Text>
+            <Text style={styles.criteria}>完成标准：{task.completionCriteria}</Text>
+            <Text style={styles.focusText}>累计专注 {formatFocusDuration(getTaskFocusSeconds(task))}</Text>
+          </View>
 
           <View style={styles.block}>
             <Text style={styles.label}>完成了吗？</Text>
             <View style={styles.statusRow}>
-              {completionStatusOptions.map((status) => (
-                <Pressable
-                  accessibilityRole="button"
-                  key={status}
-                  onPress={() => setCompletionStatus(status)}
-                  style={[
-                    styles.statusButton,
-                    completionStatus === status ? styles.statusButtonActive : undefined,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusButtonText,
-                      completionStatus === status ? styles.statusButtonTextActive : undefined,
+              {completionStatusOptions.map((status) => {
+                const isActive = completionStatus === status;
+
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={status}
+                    onPress={() => setCompletionStatus(status)}
+                    style={({ pressed }) => [
+                      styles.statusButton,
+                      isActive ? styles.statusButtonActive : undefined,
+                      pressed ? styles.pressed : undefined,
                     ]}
                   >
-                    {completionStatusLabels[status]}
-                  </Text>
-                </Pressable>
-              ))}
+                    <Text style={[styles.statusButtonText, isActive ? styles.statusButtonTextActive : undefined]}>
+                      {completionStatusLabels[status]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
 
@@ -248,48 +268,61 @@ export default function ProofScreen() {
               multiline
               onChangeText={setActualResult}
               placeholder="例如：实际写了 1800 字"
-              placeholderTextColor={colors.muted}
-              style={[styles.input, styles.textArea]}
+              placeholderTextColor={theme.textMuted}
+              selectionColor={theme.primary}
+              style={styles.input}
+              textAlignVertical="top"
               value={actualResult}
             />
           </View>
 
-          <View style={styles.block}>
+          <View style={styles.journalBlock}>
             <Text style={styles.label}>写一句给今天的自己</Text>
             <TextInput
               multiline
               onChangeText={setNote}
-              placeholder="例如：虽然开始得晚，但还是完成了。"
-              placeholderTextColor={colors.muted}
-              style={[styles.input, styles.textArea]}
+              placeholder="例如：今天也有好好兑现。"
+              placeholderTextColor={theme.textMuted}
+              selectionColor={theme.primary}
+              style={[styles.input, styles.journalInput]}
+              textAlignVertical="top"
               value={note}
             />
           </View>
 
           <View style={styles.block}>
-            <Text style={styles.label}>给今天一个证明</Text>
+            <Text style={styles.label}>拍下这一刻</Text>
             {selectedImage ? (
               <View style={styles.previewWrap}>
                 <Image source={{ uri: selectedImage.uri }} style={styles.previewImage} />
-                <PrimaryButton onPress={() => setSelectedImage(undefined)} variant="ghost">
+                <View style={styles.imageBadge}>
+                  <Text style={styles.imageBadgeText}>PROOF</Text>
+                </View>
+                <PrimaryButton onPress={removeSelectedImage} variant="quiet">
                   删除当前照片
                 </PrimaryButton>
               </View>
             ) : (
               <View style={styles.photoEmpty}>
-                <Text style={styles.photoEmptyText}>拍下这一刻，或者先只写下完成感想。</Text>
+                <View style={styles.photoDot} />
+                <Text style={styles.photoEmptyTitle}>这里会成为今天的小封面</Text>
+                <Text style={styles.photoEmptyText}>没有照片也可以保存，但拍照会更有仪式感。</Text>
               </View>
             )}
 
             <View style={styles.photoActions}>
-              <PrimaryButton onPress={takePhoto}>拍照</PrimaryButton>
-              <PrimaryButton onPress={pickImage} variant="soft">
-                从相册选择
-              </PrimaryButton>
+              <View style={styles.photoActionItem}>
+                <PrimaryButton onPress={takePhoto}>拍照</PrimaryButton>
+              </View>
+              <View style={styles.photoActionItem}>
+                <PrimaryButton onPress={pickImage} variant="soft">
+                  从相册选择
+                </PrimaryButton>
+              </View>
             </View>
           </View>
 
-          <PrimaryButton disabled={saving} onPress={() => void saveProof()}>
+          <PrimaryButton disabled={saving} onPress={() => void saveProof()} size="large">
             {saving ? '保存中' : '保存还愿'}
           </PrimaryButton>
         </ScrollView>
@@ -298,142 +331,221 @@ export default function ProofScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  keyboard: {
-    flex: 1,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 44,
-  },
-  kicker: {
-    color: colors.accentDark,
-    fontSize: 14,
-    fontWeight: '900',
-    marginBottom: 8,
-  },
-  title: {
-    color: colors.ink,
-    fontSize: 28,
-    fontWeight: '900',
-    lineHeight: 36,
-    marginBottom: 10,
-  },
-  criteria: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  focusText: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: '900',
-    marginBottom: 18,
-    marginTop: 8,
-  },
-  block: {
-    borderColor: colors.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    marginBottom: 14,
-    padding: 16,
-  },
-  label: {
-    color: colors.accentDark,
-    fontSize: 14,
-    fontWeight: '900',
-    marginBottom: 10,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  statusButton: {
-    flex: 1,
-    minHeight: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderColor: colors.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    backgroundColor: colors.background,
-  },
-  statusButtonActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  statusButtonText: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  statusButtonTextActive: {
-    color: colors.surface,
-  },
-  input: {
-    minHeight: 46,
-    borderColor: colors.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    backgroundColor: colors.background,
-    color: colors.ink,
-    fontSize: 15,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  textArea: {
-    minHeight: 96,
-    textAlignVertical: 'top',
-  },
-  previewWrap: {
-    gap: 12,
-  },
-  previewImage: {
-    width: '100%',
-    aspectRatio: 4 / 3,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceSoft,
-  },
-  photoEmpty: {
-    alignItems: 'center',
-    borderColor: colors.border,
-    borderRadius: 8,
-    borderStyle: 'dashed',
-    borderWidth: 1,
-    padding: 22,
-  },
-  photoEmptyText: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  photoActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 14,
-  },
-  empty: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-  emptyTitle: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: '900',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    keyboard: {
+      flex: 1,
+    },
+    center: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.background,
+    },
+    content: {
+      padding: spacing.lg,
+      paddingBottom: spacing.xl,
+    },
+    hero: {
+      overflow: 'hidden',
+      borderColor: theme.border,
+      borderRadius: radius.xlarge,
+      borderWidth: 1,
+      backgroundColor: theme.surface,
+      marginBottom: spacing.md,
+      padding: spacing.xl,
+    },
+    heroMark: {
+      position: 'absolute',
+      right: -28,
+      top: -36,
+      width: 120,
+      height: 120,
+      borderRadius: 60,
+      backgroundColor: theme.accent,
+      opacity: 0.72,
+    },
+    kicker: {
+      ...typography.caption,
+      color: theme.primary,
+      fontWeight: '900',
+      marginBottom: spacing.sm,
+    },
+    title: {
+      ...typography.title,
+      color: theme.text,
+      fontWeight: '900',
+      lineHeight: 36,
+      marginBottom: spacing.sm,
+      maxWidth: '86%',
+    },
+    criteria: {
+      ...typography.body,
+      color: theme.textMuted,
+      lineHeight: 22,
+    },
+    focusText: {
+      ...typography.caption,
+      alignSelf: 'flex-start',
+      overflow: 'hidden',
+      borderRadius: radius.pill,
+      backgroundColor: theme.surfaceAlt,
+      color: theme.primary,
+      fontWeight: '900',
+      marginTop: spacing.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+    },
+    block: {
+      borderColor: theme.border,
+      borderRadius: radius.large,
+      borderWidth: 1,
+      backgroundColor: theme.surface,
+      marginBottom: spacing.md,
+      padding: spacing.md,
+    },
+    journalBlock: {
+      borderColor: theme.border,
+      borderRadius: radius.xlarge,
+      borderWidth: 1,
+      backgroundColor: theme.surfaceAlt,
+      marginBottom: spacing.md,
+      padding: spacing.md,
+    },
+    label: {
+      ...typography.body,
+      color: theme.text,
+      fontWeight: '900',
+      marginBottom: spacing.sm,
+    },
+    statusRow: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+    },
+    statusButton: {
+      flex: 1,
+      minHeight: 46,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderColor: theme.border,
+      borderRadius: radius.pill,
+      borderWidth: 1,
+      backgroundColor: theme.surfaceAlt,
+      paddingHorizontal: spacing.sm,
+    },
+    statusButtonActive: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primary,
+    },
+    statusButtonText: {
+      ...typography.caption,
+      color: theme.text,
+      fontWeight: '900',
+    },
+    statusButtonTextActive: {
+      color: theme.textOnPrimary,
+    },
+    input: {
+      minHeight: 104,
+      borderColor: theme.border,
+      borderRadius: radius.medium,
+      borderWidth: 1,
+      backgroundColor: theme.surfaceAlt,
+      color: theme.text,
+      fontSize: 16,
+      lineHeight: 23,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    journalInput: {
+      minHeight: 120,
+      backgroundColor: theme.surface,
+    },
+    previewWrap: {
+      overflow: 'hidden',
+      borderColor: theme.border,
+      borderRadius: radius.xlarge,
+      borderWidth: 1,
+      backgroundColor: theme.surfaceAlt,
+      gap: spacing.sm,
+      padding: spacing.sm,
+    },
+    previewImage: {
+      width: '100%',
+      aspectRatio: 4 / 3,
+      borderRadius: radius.large,
+      backgroundColor: theme.surfaceAlt,
+    },
+    imageBadge: {
+      position: 'absolute',
+      left: spacing.lg,
+      top: spacing.lg,
+      borderRadius: radius.pill,
+      backgroundColor: theme.accent,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    imageBadgeText: {
+      ...typography.micro,
+      color: theme.text,
+      fontWeight: '900',
+    },
+    photoEmpty: {
+      alignItems: 'center',
+      borderColor: theme.border,
+      borderRadius: radius.xlarge,
+      borderStyle: 'dashed',
+      borderWidth: 1,
+      backgroundColor: theme.surfaceAlt,
+      padding: spacing.xl,
+    },
+    photoDot: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: theme.accent,
+      marginBottom: spacing.sm,
+    },
+    photoEmptyTitle: {
+      ...typography.cardTitle,
+      color: theme.text,
+      fontWeight: '900',
+      marginBottom: spacing.xs,
+      textAlign: 'center',
+    },
+    photoEmptyText: {
+      ...typography.body,
+      color: theme.textMuted,
+      lineHeight: 22,
+      textAlign: 'center',
+    },
+    photoActions: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginTop: spacing.md,
+    },
+    photoActionItem: {
+      flex: 1,
+    },
+    pressed: {
+      opacity: 0.84,
+      transform: [{ scale: 0.985 }],
+    },
+    empty: {
+      flex: 1,
+      justifyContent: 'center',
+      padding: spacing.lg,
+    },
+    emptyTitle: {
+      ...typography.section,
+      color: theme.text,
+      fontWeight: '900',
+      marginBottom: spacing.md,
+      textAlign: 'center',
+    },
+  });
+}

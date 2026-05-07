@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { STORAGE_KEYS } from './storageKeys';
-import { nowIso, toDateKey } from '@/utils/date';
+import { addDays, nowIso, toDateKey } from '@/utils/date';
 import { getTaskFocusSeconds, secondsToMinutes } from '@/utils/time';
 import type { CreateTaskInput, ISODateString, Task, UpdateTaskInput } from '@/types';
 
@@ -248,6 +248,34 @@ export async function addFocusSecondsToTask(taskId: string, seconds: number): Pr
 
   await writeTasks(tasks.map((task) => (task.id === taskId ? updated : task)));
   return updated;
+}
+
+export async function duplicateTaskToDate(taskId: string, date: ISODateString): Promise<Task> {
+  const sourceTask = await getTaskById(taskId);
+
+  if (!sourceTask) {
+    throw new Error('Task not found');
+  }
+
+  return createTask({
+    date,
+    title: sourceTask.title,
+    completionCriteria: sourceTask.completionCriteria,
+    importance: sourceTask.importance,
+    estimatedMinutes: sourceTask.estimatedMinutes,
+    note: sourceTask.note,
+    isTopThree: false,
+  });
+}
+
+export async function moveTaskToTomorrow(taskId: string): Promise<Task> {
+  const sourceTask = await getTaskById(taskId);
+
+  if (!sourceTask) {
+    throw new Error('Task not found');
+  }
+
+  return duplicateTaskToDate(taskId, addDays(sourceTask.date, 1));
 }
 
 export async function deleteTask(id: string): Promise<void> {

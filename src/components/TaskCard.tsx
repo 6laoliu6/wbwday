@@ -1,34 +1,63 @@
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors } from '@/constants/theme';
 import { completionStatusLabels, importanceLabels, statusLabels } from '@/constants/taskText';
+import { radius, shadows, spacing, typography, type AppTheme, useTheme } from '@/theme';
 import type { Task, TaskStatus } from '@/types';
 import { formatFocusDuration, getTaskFocusSeconds } from '@/utils/time';
 
 type TaskCardProps = {
   task: Task;
+  index?: number;
   isDragging?: boolean;
   onDelete?: () => void;
   onLongPress?: () => void;
   onPress?: () => void;
+  onStartFocus?: () => void;
   onStatusChange?: (status: TaskStatus) => void;
   onToggleTopThree?: () => void;
 };
 
+function formatIndex(index?: number): string {
+  return String((index ?? 0) + 1).padStart(2, '0');
+}
+
+function getStatusPillStyle(status: TaskStatus, theme: AppTheme) {
+  if (status === 'completed') {
+    return { color: theme.success, backgroundColor: theme.surfaceAlt };
+  }
+
+  if (status === 'partial') {
+    return { color: theme.warning, backgroundColor: theme.surfaceAlt };
+  }
+
+  if (status === 'in_progress') {
+    return { color: theme.primary, backgroundColor: theme.surfaceAlt };
+  }
+
+  return { color: theme.textMuted, backgroundColor: theme.surfaceAlt };
+}
+
 export function TaskCard({
   task,
+  index,
   isDragging = false,
   onDelete,
   onLongPress,
   onPress,
+  onStartFocus,
   onStatusChange,
   onToggleTopThree,
 }: TaskCardProps) {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
   const isCompleted = task.status === 'completed';
+  const isExceeded = task.completionStatus === 'exceeded';
+  const isDone = isCompleted || isExceeded;
   const focusText = formatFocusDuration(getTaskFocusSeconds(task));
-  const statusText = task.completionStatus && task.status !== 'not_started' && task.status !== 'in_progress'
-    ? completionStatusLabels[task.completionStatus]
-    : statusLabels[task.status];
+  const statusText =
+    task.completionStatus && task.status !== 'not_started' && task.status !== 'in_progress'
+      ? completionStatusLabels[task.completionStatus]
+      : statusLabels[task.status];
   const proofUri = task.proofThumbnailUri ?? task.proofImageUri;
 
   return (
@@ -39,270 +68,320 @@ export function TaskCard({
       style={({ pressed }) => [
         styles.card,
         task.isTopThree ? styles.topThreeCard : undefined,
-        isCompleted ? styles.completedCard : undefined,
+        isDone ? styles.doneCard : undefined,
         isDragging ? styles.draggingCard : undefined,
         pressed && onPress ? styles.pressed : undefined,
       ]}
     >
       <View style={styles.header}>
+        <Text style={[styles.sequence, isDone ? styles.sequenceDone : undefined]}>
+          {formatIndex(index)}
+        </Text>
+
         <View style={styles.titleGroup}>
-          {task.isTopThree ? <Text style={styles.topThreeLabel}>今日三件大事</Text> : null}
-          <Text style={[styles.title, isCompleted ? styles.completedText : undefined]} numberOfLines={2}>
+          <View style={styles.chipRow}>
+            {task.isTopThree ? <Text style={styles.majorChip}>今日三件大事</Text> : null}
+            <Text style={[styles.statusChip, getStatusPillStyle(task.status, theme)]}>
+              {isDone ? '已兑现' : statusText}
+            </Text>
+          </View>
+          <Text style={styles.title} numberOfLines={2}>
             {task.title}
           </Text>
         </View>
 
-        <View style={[styles.importance, styles[task.importance]]}>
-          <Text style={styles.importanceText}>{importanceLabels[task.importance]}</Text>
-        </View>
-      </View>
-
-      <Text style={[styles.criteria, isCompleted ? styles.completedText : undefined]} numberOfLines={3}>
-        完成标准：{task.completionCriteria}
-      </Text>
-
-      <View style={styles.metaRow}>
-        <Text style={styles.metaText}>预计 {task.estimatedMinutes} 分钟</Text>
-        <Text style={styles.metaText}>专注 {focusText}</Text>
-      </View>
-
-      <View style={styles.footer}>
-        <View style={[styles.statusPill, styles[`${task.status}Pill`]]}>
-          <Text style={[styles.statusText, isCompleted ? styles.completedStatusText : undefined]}>
-            {isCompleted ? '✓ ' : ''}
-            {statusText}
-          </Text>
-        </View>
-
         {proofUri ? (
-          <Image source={{ uri: proofUri }} style={styles.thumbnail} />
+          <View style={styles.coverWrap}>
+            <Image source={{ uri: proofUri }} style={styles.cover} />
+            <View style={styles.coverBadge} />
+          </View>
         ) : null}
       </View>
 
-      <Text style={styles.dragHint}>长按卡片拖动排序，越靠上越重要</Text>
+      <Text style={styles.criteria} numberOfLines={2}>
+        {task.completionCriteria}
+      </Text>
+
+      <View style={styles.metaRow}>
+        <Text style={styles.metaText}>预计 {task.estimatedMinutes} min</Text>
+        <Text style={styles.metaText}>专注 {focusText}</Text>
+        <Text style={styles.importanceText}>{importanceLabels[task.importance]}优先级</Text>
+      </View>
+
+      <View style={styles.primaryRow}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onStartFocus}
+          style={({ pressed }) => [styles.focusButton, pressed ? styles.focusPressed : undefined]}
+        >
+          <Text style={styles.focusButtonText}>开始专注</Text>
+          <View style={styles.focusDot} />
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={onPress}
+          style={({ pressed }) => [styles.detailButton, pressed ? styles.detailPressed : undefined]}
+        >
+          <Text style={styles.detailText}>查看详情</Text>
+        </Pressable>
+      </View>
 
       <View style={styles.actionRow}>
-        <Pressable
-          accessibilityRole="button"
+        <MiniAction
+          active={task.status === 'completed'}
+          label="完成"
           onPress={() => onStatusChange?.('completed')}
-          style={[styles.actionButton, task.status === 'completed' ? styles.actionActive : undefined]}
-        >
-          <Text
-            style={[
-              styles.actionText,
-              task.status === 'completed' ? styles.actionActiveText : undefined,
-            ]}
-          >
-            完成
-          </Text>
-        </Pressable>
-
-        <Pressable
-          accessibilityRole="button"
+          theme={theme}
+        />
+        <MiniAction
+          active={task.status === 'partial'}
+          label="部分"
           onPress={() => onStatusChange?.('partial')}
-          style={[styles.actionButton, task.status === 'partial' ? styles.actionActive : undefined]}
-        >
-          <Text
-            style={[
-              styles.actionText,
-              task.status === 'partial' ? styles.actionActiveText : undefined,
-            ]}
-          >
-            部分完成
-          </Text>
-        </Pressable>
-
-        <Pressable
-          accessibilityRole="button"
+          theme={theme}
+        />
+        <MiniAction
+          active={task.status === 'not_started'}
+          label="未开始"
           onPress={() => onStatusChange?.('not_started')}
-          style={[
-            styles.actionButton,
-            task.status === 'not_started' ? styles.actionActiveSoft : undefined,
-          ]}
-        >
-          <Text style={styles.actionText}>未开始</Text>
-        </Pressable>
-
-        <Pressable accessibilityRole="button" onPress={onToggleTopThree} style={styles.actionButton}>
-          <Text style={styles.actionText}>{task.isTopThree ? '取消大事' : '设为大事'}</Text>
-        </Pressable>
-
-        <Pressable accessibilityRole="button" onPress={onDelete} style={[styles.actionButton, styles.deleteButton]}>
-          <Text style={[styles.actionText, styles.deleteText]}>删除</Text>
-        </Pressable>
+          theme={theme}
+        />
+        <MiniAction
+          label={task.isTopThree ? '取消大事' : '设为大事'}
+          onPress={onToggleTopThree}
+          theme={theme}
+        />
+        <MiniAction danger label="删除" onPress={onDelete} theme={theme} />
       </View>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: 8,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+function MiniAction({
+  active = false,
+  danger = false,
+  label,
+  onPress,
+  theme,
+}: {
+  active?: boolean;
+  danger?: boolean;
+  label: string;
+  onPress?: () => void;
+  theme: AppTheme;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        miniStyles.action,
+        {
+          backgroundColor: active ? theme.primary : theme.surface,
+          borderColor: active ? theme.primary : theme.border,
+        },
+        pressed ? miniStyles.pressed : undefined,
+      ]}
+    >
+      <Text
+        style={[
+          miniStyles.text,
+          {
+            color: active ? theme.textOnPrimary : danger ? theme.danger : theme.text,
+          },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+const miniStyles = StyleSheet.create({
+  action: {
+    minHeight: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
     borderWidth: 1,
-    padding: 16,
-    marginBottom: 12,
-  },
-  topThreeCard: {
-    borderColor: colors.accent,
-    borderLeftWidth: 5,
-    backgroundColor: '#FFFDFC',
-  },
-  completedCard: {
-    opacity: 0.72,
-  },
-  draggingCard: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    transform: [{ scale: 1.01 }],
+    paddingHorizontal: spacing.sm,
   },
   pressed: {
-    opacity: 0.9,
+    opacity: 0.82,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  titleGroup: {
-    flex: 1,
-  },
-  topThreeLabel: {
-    color: colors.accentDark,
-    fontSize: 12,
-    fontWeight: '900',
-    marginBottom: 6,
-  },
-  title: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: '900',
-    lineHeight: 25,
-  },
-  completedText: {
-    textDecorationLine: 'line-through',
-  },
-  importance: {
-    minWidth: 34,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
-  },
-  high: {
-    backgroundColor: '#F4D7CF',
-  },
-  medium: {
-    backgroundColor: '#F5E4BD',
-  },
-  low: {
-    backgroundColor: '#DCE8D7',
-  },
-  importanceText: {
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  criteria: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 12,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 14,
-  },
-  metaText: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  footer: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 14,
-  },
-  statusPill: {
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  not_startedPill: {
-    backgroundColor: colors.surfaceSoft,
-  },
-  in_progressPill: {
-    backgroundColor: '#E6EDF6',
-  },
-  completedPill: {
-    backgroundColor: '#DCE8D7',
-  },
-  partialPill: {
-    backgroundColor: '#F5E4BD',
-  },
-  statusText: {
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  completedStatusText: {
-    color: colors.success,
-  },
-  thumbnail: {
-    width: 46,
-    height: 46,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceSoft,
-  },
-  dragHint: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 10,
-  },
-  actionRow: {
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 14,
-    paddingTop: 12,
-  },
-  actionButton: {
-    minHeight: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderColor: colors.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-  },
-  actionActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  actionActiveSoft: {
-    backgroundColor: colors.surfaceSoft,
-  },
-  actionText: {
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  actionActiveText: {
-    color: colors.surface,
-  },
-  deleteButton: {
-    borderColor: '#E7C9C2',
-  },
-  deleteText: {
-    color: colors.danger,
+  text: {
+    ...typography.caption,
   },
 });
+
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    card: {
+      borderColor: theme.border,
+      borderRadius: radius.large,
+      borderWidth: 1,
+      backgroundColor: theme.surface,
+      marginBottom: spacing.md,
+      padding: spacing.lg,
+      ...shadows.soft,
+      shadowColor: theme.primary,
+    },
+    topThreeCard: {
+      borderColor: theme.primary,
+      backgroundColor: theme.surfaceAlt,
+    },
+    doneCard: {
+      backgroundColor: theme.surfaceAlt,
+      opacity: 0.88,
+    },
+    draggingCard: {
+      ...shadows.floating,
+      shadowColor: theme.primary,
+      transform: [{ scale: 1.015 }],
+    },
+    pressed: {
+      opacity: 0.94,
+      transform: [{ scale: 0.992 }],
+    },
+    header: {
+      alignItems: 'flex-start',
+      flexDirection: 'row',
+      gap: spacing.md,
+    },
+    sequence: {
+      color: theme.primary,
+      fontSize: 34,
+      fontWeight: '900',
+      lineHeight: 36,
+      width: 48,
+    },
+    sequenceDone: {
+      color: theme.success,
+    },
+    titleGroup: {
+      flex: 1,
+    },
+    chipRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.xs,
+      marginBottom: spacing.xs,
+    },
+    majorChip: {
+      ...typography.micro,
+      color: theme.text,
+      backgroundColor: theme.accent,
+      borderRadius: radius.pill,
+      overflow: 'hidden',
+      paddingHorizontal: spacing.xs,
+      paddingVertical: 4,
+    },
+    statusChip: {
+      ...typography.micro,
+      borderRadius: radius.pill,
+      overflow: 'hidden',
+      paddingHorizontal: spacing.xs,
+      paddingVertical: 4,
+    },
+    title: {
+      ...typography.cardTitle,
+      color: theme.text,
+    },
+    coverWrap: {
+      borderColor: theme.primary,
+      borderRadius: radius.medium,
+      borderWidth: 2,
+      padding: 3,
+    },
+    cover: {
+      width: 72,
+      height: 88,
+      borderRadius: radius.small,
+      backgroundColor: theme.surfaceAlt,
+    },
+    coverBadge: {
+      position: 'absolute',
+      right: -4,
+      top: -4,
+      width: 14,
+      height: 14,
+      borderRadius: 7,
+      backgroundColor: theme.accent,
+    },
+    criteria: {
+      ...typography.body,
+      color: theme.textMuted,
+      marginTop: spacing.md,
+    },
+    metaRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      marginTop: spacing.md,
+    },
+    metaText: {
+      ...typography.caption,
+      color: theme.textMuted,
+    },
+    importanceText: {
+      ...typography.caption,
+      color: theme.primary,
+    },
+    primaryRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginTop: spacing.lg,
+    },
+    focusButton: {
+      minHeight: 46,
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radius.pill,
+      backgroundColor: theme.primary,
+      flexDirection: 'row',
+      gap: spacing.xs,
+    },
+    focusPressed: {
+      opacity: 0.9,
+      transform: [{ scale: 0.985 }],
+    },
+    focusButtonText: {
+      ...typography.body,
+      color: theme.textOnPrimary,
+      fontWeight: '900',
+    },
+    focusDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: theme.accent,
+    },
+    detailButton: {
+      minHeight: 46,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radius.pill,
+      paddingHorizontal: spacing.md,
+      backgroundColor: theme.surfaceAlt,
+    },
+    detailPressed: {
+      opacity: 0.84,
+    },
+    detailText: {
+      ...typography.caption,
+      color: theme.primary,
+    },
+    actionRow: {
+      borderTopColor: theme.border,
+      borderTopWidth: 1,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.xs,
+      marginTop: spacing.md,
+      paddingTop: spacing.md,
+    },
+  });
+}

@@ -1,5 +1,4 @@
-import type { TaskImportance, TaskStatus } from '@/types';
-import type { CompletionStatus } from '@/types';
+import type { CompletionStatus, TaskImportance, TaskStatus } from '@/types';
 
 export const importanceLabels: Record<TaskImportance, string> = {
   high: '高',

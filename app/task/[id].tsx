@@ -1,15 +1,16 @@
 import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
-import { colors } from '@/constants/theme';
 import { completionStatusLabels, importanceNames, statusLabels } from '@/constants/taskText';
 import { getFocusSessionsByTaskId } from '@/storage/focusRepository';
 import { getLatestCompletionProofByTaskId } from '@/storage/proofRepository';
 import { getTaskById, updateTask } from '@/storage/taskRepository';
+import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
 import type { CompletionProof, FocusSession, Task } from '@/types';
 import { formatFullChineseDate } from '@/utils/date';
+import { hapticLight, hapticSelection, hapticSuccess } from '@/utils/haptics';
 import { formatClockTime, formatFocusDuration, getTaskFocusSeconds } from '@/utils/time';
 
 const focusModeLabels: Record<FocusSession['mode'], string> = {
@@ -18,6 +19,8 @@ const focusModeLabels: Record<FocusSession['mode'], string> = {
 };
 
 export default function TaskDetailScreen() {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const params = useLocalSearchParams<{ id: string }>();
   const [task, setTask] = useState<Task | undefined>();
   const [focusSessions, setFocusSessions] = useState<FocusSession[]>([]);
@@ -58,6 +61,7 @@ export default function TaskDetailScreen() {
       completionStatus: 'completed',
       completedAt: new Date().toISOString(),
     });
+    void hapticSuccess();
     setTask(updated);
   }, [task]);
 
@@ -71,13 +75,14 @@ export default function TaskDetailScreen() {
       completionStatus: 'partial',
       completedAt: new Date().toISOString(),
     });
+    void hapticSelection();
     setTask(updated);
   }, [task]);
 
   if (loading) {
     return (
       <SafeAreaView style={styles.center}>
-        <ActivityIndicator color={colors.accent} />
+        <ActivityIndicator color={theme.primary} />
       </SafeAreaView>
     );
   }
@@ -95,24 +100,42 @@ export default function TaskDetailScreen() {
     );
   }
 
+  const proofUri = completionProof?.thumbnailUri ?? completionProof?.imageUri;
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.date}>{formatFullChineseDate(task.date)}</Text>
-        <Text style={styles.title}>{task.title}</Text>
+        <View style={styles.hero}>
+          <View style={styles.heroShape} />
+          <Text style={styles.date}>{formatFullChineseDate(task.date)}</Text>
+          <Text style={styles.title}>{task.title}</Text>
+          <View style={styles.statusRow}>
+            <Text style={styles.statusChip}>{statusLabels[task.status]}</Text>
+            <Text style={styles.statusChip}>{importanceNames[task.importance]}</Text>
+            {task.isTopThree ? <Text style={styles.statusChip}>今日三件大事</Text> : null}
+          </View>
+        </View>
 
-        <View style={styles.buttonRow}>
-          <PrimaryButton onPress={() => router.push(`/focus/${task.id}` as Href)}>开始专注</PrimaryButton>
-          <PrimaryButton onPress={() => router.push(`/proof/${task.id}` as Href)} variant="soft">
+        <View style={styles.primaryActions}>
+          <PrimaryButton
+            onPress={() => {
+              void hapticLight();
+              router.push(`/focus/${task.id}` as Href);
+            }}
+            size="large"
+          >
+            开始专注
+          </PrimaryButton>
+          <PrimaryButton onPress={() => router.push(`/proof/${task.id}` as Href)} size="large" variant="soft">
             完成并还愿
           </PrimaryButton>
         </View>
 
-        <View style={styles.buttonRow}>
+        <View style={styles.secondaryActions}>
           <PrimaryButton onPress={markComplete} variant="soft">
             仅标记完成
           </PrimaryButton>
-          <PrimaryButton onPress={markPartial} variant="ghost">
+          <PrimaryButton onPress={markPartial} variant="quiet">
             标记部分完成
           </PrimaryButton>
         </View>
@@ -123,15 +146,8 @@ export default function TaskDetailScreen() {
         </View>
 
         <View style={styles.grid}>
-          <InfoItem label="重要程度" value={importanceNames[task.importance]} />
-          <InfoItem label="预计时间" value={`${task.estimatedMinutes} 分钟`} />
-          <InfoItem label="当前状态" value={statusLabels[task.status]} />
-          <InfoItem label="累计专注" value={formatFocusDuration(getTaskFocusSeconds(task))} />
-        </View>
-
-        <View style={styles.block}>
-          <Text style={styles.label}>今日三件大事</Text>
-          <Text style={styles.body}>{task.isTopThree ? '是' : '否'}</Text>
+          <InfoItem label="预计时间" theme={theme} value={`${task.estimatedMinutes} 分钟`} />
+          <InfoItem label="累计专注" theme={theme} value={formatFocusDuration(getTaskFocusSeconds(task))} />
         </View>
 
         <View style={styles.block}>
@@ -146,7 +162,7 @@ export default function TaskDetailScreen() {
           ) : (
             focusSessions.map((session) => (
               <View key={session.id} style={styles.sessionRow}>
-                <View>
+                <View style={styles.sessionCopy}>
                   <Text style={styles.sessionTitle}>{focusModeLabels[session.mode]}</Text>
                   <Text style={styles.sessionMeta}>
                     {formatClockTime(session.startedAt)} 开始 · {session.completed ? '已完成' : '提前结束'}
@@ -162,15 +178,14 @@ export default function TaskDetailScreen() {
           <Text style={styles.label}>还愿记录</Text>
           {completionProof ? (
             <View>
-              {completionProof.thumbnailUri ?? completionProof.imageUri ? (
-                <Image
-                  source={{ uri: completionProof.thumbnailUri ?? completionProof.imageUri }}
-                  style={styles.proofImage}
-                />
+              {proofUri ? (
+                <View style={styles.proofFrame}>
+                  <Image source={{ uri: proofUri }} style={styles.proofImage} />
+                  <View style={styles.proofBadge}>
+                    <Text style={styles.proofBadgeText}>{completionStatusLabels[completionProof.completionStatus]}</Text>
+                  </View>
+                </View>
               ) : null}
-              <Text style={styles.body}>
-                完成状态：{completionStatusLabels[completionProof.completionStatus]}
-              </Text>
               <Text style={styles.body}>
                 实际完成：{completionProof.actualResult?.trim() || '未填写'}
               </Text>
@@ -202,141 +217,199 @@ export default function TaskDetailScreen() {
   );
 }
 
-function InfoItem({ label, value }: { label: string; value: string }) {
+function InfoItem({ label, theme, value }: { label: string; theme: AppTheme; value: string }) {
   return (
-    <View style={styles.infoItem}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
+    <View
+      style={{
+        flex: 1,
+        minWidth: 140,
+        borderColor: theme.border,
+        borderRadius: radius.large,
+        borderWidth: 1,
+        backgroundColor: theme.surface,
+        padding: spacing.md,
+      }}
+    >
+      <Text style={{ ...typography.caption, color: theme.textMuted, fontWeight: '900', marginBottom: spacing.xs }}>
+        {label}
+      </Text>
+      <Text style={{ ...typography.cardTitle, color: theme.primary, fontWeight: '900' }}>{value}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 44,
-  },
-  date: {
-    color: colors.accentDark,
-    fontSize: 15,
-    fontWeight: '900',
-    marginBottom: 10,
-  },
-  title: {
-    color: colors.ink,
-    fontSize: 26,
-    fontWeight: '900',
-    lineHeight: 34,
-    marginBottom: 16,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
-  },
-  block: {
-    borderColor: colors.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    marginBottom: 14,
-    padding: 16,
-  },
-  label: {
-    color: colors.accentDark,
-    fontSize: 14,
-    fontWeight: '900',
-    marginBottom: 8,
-  },
-  body: {
-    color: colors.ink,
-    fontSize: 16,
-    lineHeight: 24,
-    marginBottom: 6,
-  },
-  mutedBody: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 14,
-  },
-  infoItem: {
-    width: '48%',
-    borderColor: colors.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    padding: 14,
-  },
-  infoLabel: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  infoValue: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  sessionRow: {
-    alignItems: 'center',
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-  },
-  sessionTitle: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  sessionMeta: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-  sessionDuration: {
-    color: colors.accentDark,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  proofImage: {
-    width: '100%',
-    aspectRatio: 4 / 3,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceSoft,
-    marginBottom: 12,
-  },
-  proofAction: {
-    marginTop: 12,
-  },
-  empty: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-  emptyTitle: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: '900',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    center: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.background,
+    },
+    content: {
+      padding: spacing.lg,
+      paddingBottom: spacing.xl,
+    },
+    hero: {
+      overflow: 'hidden',
+      borderColor: theme.border,
+      borderRadius: radius.xlarge,
+      borderWidth: 1,
+      backgroundColor: theme.surface,
+      marginBottom: spacing.md,
+      padding: spacing.xl,
+    },
+    heroShape: {
+      position: 'absolute',
+      right: -34,
+      top: -26,
+      width: 128,
+      height: 96,
+      borderRadius: radius.xlarge,
+      backgroundColor: theme.accent,
+      transform: [{ rotate: '-12deg' }],
+    },
+    date: {
+      ...typography.caption,
+      color: theme.primary,
+      fontWeight: '900',
+      marginBottom: spacing.sm,
+    },
+    title: {
+      ...typography.title,
+      color: theme.text,
+      fontWeight: '900',
+      lineHeight: 36,
+      marginBottom: spacing.md,
+      maxWidth: '86%',
+    },
+    statusRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+    },
+    statusChip: {
+      ...typography.caption,
+      overflow: 'hidden',
+      borderRadius: radius.pill,
+      backgroundColor: theme.surfaceAlt,
+      color: theme.text,
+      fontWeight: '900',
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    primaryActions: {
+      gap: spacing.sm,
+      marginBottom: spacing.sm,
+    },
+    secondaryActions: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginBottom: spacing.md,
+    },
+    block: {
+      borderColor: theme.border,
+      borderRadius: radius.large,
+      borderWidth: 1,
+      backgroundColor: theme.surface,
+      marginBottom: spacing.md,
+      padding: spacing.md,
+    },
+    label: {
+      ...typography.body,
+      color: theme.text,
+      fontWeight: '900',
+      marginBottom: spacing.sm,
+    },
+    body: {
+      ...typography.body,
+      color: theme.text,
+      lineHeight: 23,
+      marginBottom: spacing.xs,
+    },
+    mutedBody: {
+      ...typography.body,
+      color: theme.textMuted,
+      lineHeight: 22,
+    },
+    grid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      marginBottom: spacing.md,
+    },
+    sessionRow: {
+      alignItems: 'center',
+      borderTopColor: theme.border,
+      borderTopWidth: 1,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: spacing.sm,
+    },
+    sessionCopy: {
+      flex: 1,
+      paddingRight: spacing.sm,
+    },
+    sessionTitle: {
+      ...typography.body,
+      color: theme.text,
+      fontWeight: '900',
+      marginBottom: spacing.xxs,
+    },
+    sessionMeta: {
+      ...typography.caption,
+      color: theme.textMuted,
+    },
+    sessionDuration: {
+      ...typography.caption,
+      color: theme.primary,
+      fontWeight: '900',
+    },
+    proofFrame: {
+      overflow: 'hidden',
+      borderColor: theme.border,
+      borderRadius: radius.xlarge,
+      borderWidth: 1,
+      backgroundColor: theme.surfaceAlt,
+      marginBottom: spacing.md,
+    },
+    proofImage: {
+      width: '100%',
+      aspectRatio: 4 / 3,
+      backgroundColor: theme.surfaceAlt,
+    },
+    proofBadge: {
+      position: 'absolute',
+      left: spacing.md,
+      top: spacing.md,
+      borderRadius: radius.pill,
+      backgroundColor: theme.accent,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    proofBadgeText: {
+      ...typography.caption,
+      color: theme.text,
+      fontWeight: '900',
+    },
+    proofAction: {
+      marginTop: spacing.md,
+    },
+    empty: {
+      flex: 1,
+      justifyContent: 'center',
+      padding: spacing.lg,
+    },
+    emptyTitle: {
+      ...typography.section,
+      color: theme.text,
+      fontWeight: '900',
+      marginBottom: spacing.md,
+      textAlign: 'center',
+    },
+  });
+}

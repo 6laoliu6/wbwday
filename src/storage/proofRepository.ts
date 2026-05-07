@@ -69,6 +69,11 @@ export async function getCompletionProofsByTaskId(taskId: string): Promise<Compl
   return sortProofs(proofs.filter((proof) => proof.taskId === taskId));
 }
 
+export async function getCompletionProofsByDate(date: ISODateString): Promise<CompletionProof[]> {
+  const proofs = await readProofs();
+  return sortProofs(proofs.filter((proof) => proof.date === date));
+}
+
 export async function getLatestCompletionProofByTaskId(
   taskId: string,
 ): Promise<CompletionProof | undefined> {

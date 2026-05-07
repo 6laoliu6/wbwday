@@ -1,41 +1,59 @@
-import { Link, router, useFocusEffect, type Href } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Pressable,
   RefreshControl,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import DraggableFlatList, {
-  type RenderItemParams,
   ScaleDecorator,
+  type RenderItemParams,
 } from 'react-native-draggable-flatlist';
 
-import { AttachmentCard } from '@/components/AttachmentCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { TaskCard } from '@/components/TaskCard';
-import { mockAttachments } from '@/constants/mockAttachments';
-import { colors } from '@/constants/theme';
+import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
 import {
-  deleteTask,
   MAX_TOP_THREE_TASKS,
+  deleteTask,
   getTodayTasks,
   saveTaskOrder,
   updateTask,
 } from '@/storage/taskRepository';
 import type { Task, TaskStatus } from '@/types';
-import { formatFullChineseDate, toDateKey } from '@/utils/date';
-import { formatFocusDuration, getTaskFocusSeconds } from '@/utils/time';
+import { formatEditorialDate, toDateKey } from '@/utils/date';
+import {
+  hapticLight,
+  hapticSelection,
+  hapticSuccess,
+  hapticWarning,
+} from '@/utils/haptics';
+import { getTaskFocusSeconds } from '@/utils/time';
 
 function isTopThreeLimitError(error: unknown): boolean {
   return error instanceof Error && error.message === 'TOP_THREE_LIMIT_REACHED';
 }
 
+function formatHomeFocus(seconds: number): string {
+  const minutes = Math.floor(Math.max(0, seconds) / 60);
+
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return restMinutes > 0 ? `${hours}h ${restMinutes}m` : `${hours}h`;
+}
+
 export default function TodayScreen() {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,7 +72,10 @@ export default function TodayScreen() {
   );
 
   const completedCount = useMemo(
-    () => tasks.filter((task) => task.status === 'completed').length,
+    () =>
+      tasks.filter(
+        (task) => task.status === 'completed' || task.completionStatus === 'exceeded',
+      ).length,
     [tasks],
   );
 
@@ -64,8 +85,6 @@ export default function TodayScreen() {
   );
 
   const progressPercent = tasks.length === 0 ? 0 : Math.round((completedCount / tasks.length) * 100);
-  const headlineAttachment = mockAttachments.find((attachment) => attachment.id === 'headline');
-  const primaryAttachments = mockAttachments.filter((attachment) => attachment.id !== 'headline');
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -78,8 +97,14 @@ export default function TodayScreen() {
       status,
       completionStatus:
         status === 'completed' ? 'completed' : status === 'partial' ? 'partial' : undefined,
-      completedAt: status === 'completed' || status === 'partial' ? new Date().toISOString() : undefined,
+      completedAt:
+        status === 'completed' || status === 'partial' ? new Date().toISOString() : undefined,
     });
+
+    if (status === 'completed') {
+      void hapticSuccess();
+    }
+
     setTasks((current) => current.map((item) => (item.id === updated.id ? updated : item)));
   }, []);
 
@@ -88,6 +113,7 @@ export default function TodayScreen() {
       const currentTopThreeCount = tasks.filter((item) => item.isTopThree).length;
 
       if (currentTopThreeCount >= MAX_TOP_THREE_TASKS) {
+        void hapticWarning();
         Alert.alert('今日三件大事已满', '最多只能设置 3 个任务为今日三件大事。');
         return;
       }
@@ -98,6 +124,7 @@ export default function TodayScreen() {
       setTasks((current) => current.map((item) => (item.id === updated.id ? updated : item)));
     } catch (error) {
       if (isTopThreeLimitError(error)) {
+        void hapticWarning();
         Alert.alert('今日三件大事已满', '最多只能设置 3 个任务为今日三件大事。');
         return;
       }
@@ -128,6 +155,7 @@ export default function TodayScreen() {
         today,
         data.map((task) => task.id),
       );
+      void hapticSelection();
       setTasks(persistedTasks);
     },
     [today],
@@ -137,23 +165,28 @@ export default function TodayScreen() {
     ({ item, drag, isActive }: RenderItemParams<Task>) => (
       <ScaleDecorator>
         <TaskCard
+          index={tasks.findIndex((task) => task.id === item.id)}
           isDragging={isActive}
           onDelete={() => confirmDelete(item)}
           onLongPress={drag}
           onPress={() => router.push(`/task/${item.id}` as Href)}
+          onStartFocus={() => {
+            void hapticLight();
+            router.push(`/focus/${item.id}` as Href);
+          }}
           onStatusChange={(status) => changeStatus(item, status)}
           onToggleTopThree={() => toggleTopThree(item)}
           task={item}
         />
       </ScaleDecorator>
     ),
-    [changeStatus, confirmDelete, toggleTopThree],
+    [changeStatus, confirmDelete, tasks, toggleTopThree],
   );
 
   if (loading) {
     return (
       <SafeAreaView style={styles.center}>
-        <ActivityIndicator color={colors.accent} />
+        <ActivityIndicator color={theme.primary} />
       </SafeAreaView>
     );
   }
@@ -169,215 +202,346 @@ export default function TodayScreen() {
         ListHeaderComponent={
           <View>
             <View style={styles.hero}>
-              <Text style={styles.date}>{formatFullChineseDate(today)}</Text>
-              <Text style={styles.heading}>今天，把愿望落到手上。</Text>
-
-              <View style={styles.statsRow}>
-                <View style={styles.statItem}>
-                  <Text style={styles.statValue}>
-                    {completedCount} / {tasks.length}
-                  </Text>
-                  <Text style={styles.statLabel}>已完成</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{formatFocusDuration(totalFocusSeconds)}</Text>
-                  <Text style={styles.statLabel}>今日专注</Text>
-                </View>
+              <View style={styles.heroText}>
+                <Text style={styles.brand}>WBWday</Text>
+                <Text style={styles.date}>{formatEditorialDate(today)}</Text>
+                <Text style={styles.heading}>今天，只完成真正重要的事。</Text>
               </View>
 
+              <View style={styles.geometry} pointerEvents="none">
+                <View style={styles.blueBlock} />
+                <View style={styles.yellowOrb} />
+                <View style={styles.blueRail} />
+                <View style={styles.tinyDot} />
+              </View>
+            </View>
+
+            <View style={styles.statusPanel}>
+              <View>
+                <Text style={styles.metricNumber}>
+                  {completedCount}
+                  <Text style={styles.metricSlash}> / {tasks.length}</Text>
+                </Text>
+                <Text style={styles.metricLabel}>已完成任务</Text>
+              </View>
+              <View style={styles.focusBlock}>
+                <Text style={styles.focusValue}>{formatHomeFocus(totalFocusSeconds)}</Text>
+                <Text style={styles.metricLabel}>今日专注</Text>
+              </View>
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
               </View>
             </View>
 
-            <View style={styles.actions}>
-              <Link href="/task/new" asChild>
-                <PrimaryButton>手动添加任务</PrimaryButton>
-              </Link>
-              <Link href={'/plan' as Href} asChild>
-                <PrimaryButton variant="soft">晨间规划</PrimaryButton>
-              </Link>
+            <PrimaryButton
+              onPress={() => {
+                void hapticLight();
+                router.push('/plan' as Href);
+              }}
+              size="large"
+              style={styles.mainCta}
+            >
+              开始晨间规划
+            </PrimaryButton>
+
+            <View style={styles.secondaryGrid}>
+              <SecondaryEntry label="手动添加" onPress={() => router.push('/task/new' as Href)} />
+              <SecondaryEntry label="晚间复盘" onPress={() => router.push('/review' as Href)} />
+              <SecondaryEntry label="历史记录" onPress={() => router.push('/history' as Href)} />
+              <SecondaryEntry label="主题" onPress={() => router.push('/theme' as Href)} />
             </View>
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.attachmentList}
-            >
-              {primaryAttachments.map((attachment) => (
-                <AttachmentCard
-                  content={attachment.content}
-                  key={attachment.id}
-                  title={attachment.title}
-                />
-              ))}
-            </ScrollView>
-
-            {headlineAttachment ? (
-              <View style={styles.headlineWrap}>
-                <AttachmentCard
-                  content={headlineAttachment.content}
-                  muted
-                  title={headlineAttachment.title}
-                />
-              </View>
-            ) : null}
+            <Text style={styles.whisper}>把今天切小一点，把注意力放亮一点。</Text>
 
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>今日任务</Text>
-              <Text style={styles.sectionHint}>长按卡片拖动排序</Text>
+              <Text style={styles.sectionHint}>长按拖动排序</Text>
             </View>
           </View>
         }
         onDragEnd={saveOrder}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.primary} />
+        }
         renderItem={renderTask}
       />
     </SafeAreaView>
   );
 }
 
-function EmptyState() {
+function SecondaryEntry({ label, onPress }: { label: string; onPress: () => void }) {
+  const { theme } = useTheme();
+
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>今天还没有立愿。</Text>
-      <Text style={styles.emptyText}>先写下一件真正想完成的事，再给它一个清楚的完成标准。</Text>
-      <View style={styles.emptyActions}>
-        <Link href={'/plan' as Href} asChild>
-          <PrimaryButton variant="soft">晨间规划</PrimaryButton>
-        </Link>
-        <Link href="/task/new" asChild>
-          <PrimaryButton>手动添加任务</PrimaryButton>
-        </Link>
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        secondaryStyles.entry,
+        {
+          backgroundColor: theme.surface,
+          borderColor: theme.border,
+        },
+        pressed ? secondaryStyles.pressed : undefined,
+      ]}
+    >
+      <Text style={[secondaryStyles.label, { color: theme.primary }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function EmptyState() {
+  const { theme } = useTheme();
+
+  return (
+    <View
+      style={[
+        emptyStyles.empty,
+        {
+          borderColor: theme.border,
+          backgroundColor: theme.surface,
+        },
+      ]}
+    >
+      <Text style={[emptyStyles.title, { color: theme.text }]}>今天还没有立愿。</Text>
+      <Text style={[emptyStyles.text, { color: theme.textMuted }]}>
+        先写下一件真正重要的事，再给它一个清楚的完成标准。
+      </Text>
+      <View style={emptyStyles.actions}>
+        <PrimaryButton
+          onPress={() => {
+            void hapticLight();
+            router.push('/plan' as Href);
+          }}
+          variant="soft"
+        >
+          晨间规划
+        </PrimaryButton>
+        <PrimaryButton onPress={() => router.push('/task/new' as Href)}>手动添加</PrimaryButton>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  center: {
-    flex: 1,
+const secondaryStyles = StyleSheet.create({
+  entry: {
+    minHeight: 44,
+    minWidth: '23%',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.background,
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 44,
-  },
-  hero: {
-    borderRadius: 8,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    padding: 20,
+    paddingHorizontal: spacing.sm,
   },
-  date: {
-    color: colors.accentDark,
-    fontSize: 15,
-    fontWeight: '900',
-    marginBottom: 10,
+  pressed: {
+    opacity: 0.84,
+    transform: [{ scale: 0.985 }],
   },
-  heading: {
-    color: colors.ink,
-    fontSize: 26,
-    fontWeight: '900',
-    lineHeight: 34,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 18,
-  },
-  statItem: {
-    flex: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    backgroundColor: colors.background,
-    padding: 12,
-  },
-  statValue: {
-    color: colors.ink,
-    fontSize: 22,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  statLabel: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  progressTrack: {
-    height: 10,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceSoft,
-    marginTop: 16,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 8,
-    backgroundColor: colors.accent,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
-  },
-  attachmentList: {
-    gap: 12,
-    paddingTop: 18,
-    paddingBottom: 10,
-  },
-  headlineWrap: {
-    marginBottom: 18,
-  },
-  sectionHeader: {
-    alignItems: 'flex-end',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  sectionHint: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  empty: {
-    alignItems: 'center',
-    borderColor: colors.border,
-    borderRadius: 8,
-    borderStyle: 'dashed',
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    padding: 24,
-  },
-  emptyTitle: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: '900',
-    marginBottom: 8,
-  },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  emptyActions: {
-    alignSelf: 'stretch',
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 18,
+  label: {
+    ...typography.caption,
   },
 });
+
+const emptyStyles = StyleSheet.create({
+  empty: {
+    alignItems: 'center',
+    borderRadius: radius.large,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    padding: spacing.xl,
+  },
+  title: {
+    ...typography.section,
+    marginBottom: spacing.xs,
+  },
+  text: {
+    ...typography.body,
+    textAlign: 'center',
+  },
+  actions: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+});
+
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    center: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.background,
+    },
+    content: {
+      padding: spacing.lg,
+      paddingBottom: spacing.huge,
+    },
+    hero: {
+      minHeight: 310,
+      borderRadius: radius.xlarge,
+      backgroundColor: theme.surface,
+      overflow: 'hidden',
+      padding: spacing.xl,
+      shadowColor: theme.primary,
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.1,
+      shadowRadius: 24,
+      elevation: 4,
+    },
+    heroText: {
+      maxWidth: 270,
+      zIndex: 2,
+    },
+    brand: {
+      color: theme.primary,
+      fontSize: 54,
+      fontWeight: '900',
+      letterSpacing: 0,
+      lineHeight: 58,
+    },
+    date: {
+      ...typography.caption,
+      color: theme.textMuted,
+      marginTop: spacing.sm,
+    },
+    heading: {
+      ...typography.title,
+      color: theme.text,
+      marginTop: spacing.xl,
+    },
+    geometry: {
+      bottom: -10,
+      height: 230,
+      position: 'absolute',
+      right: -28,
+      width: 230,
+    },
+    blueBlock: {
+      position: 'absolute',
+      right: 18,
+      top: 24,
+      width: 132,
+      height: 178,
+      borderRadius: radius.large,
+      backgroundColor: theme.primary,
+      transform: [{ rotate: '10deg' }],
+    },
+    yellowOrb: {
+      position: 'absolute',
+      right: 104,
+      top: 58,
+      width: 92,
+      height: 92,
+      borderRadius: 46,
+      backgroundColor: theme.accent,
+    },
+    blueRail: {
+      position: 'absolute',
+      right: 0,
+      bottom: 38,
+      width: 220,
+      height: 42,
+      borderRadius: radius.pill,
+      backgroundColor: theme.primary,
+      opacity: 0.72,
+      transform: [{ rotate: '-18deg' }],
+    },
+    tinyDot: {
+      position: 'absolute',
+      right: 54,
+      top: 0,
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: theme.accent,
+    },
+    statusPanel: {
+      borderColor: theme.border,
+      borderRadius: radius.large,
+      borderWidth: 1,
+      backgroundColor: theme.surface,
+      marginTop: spacing.lg,
+      padding: spacing.lg,
+      shadowColor: theme.primary,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.08,
+      shadowRadius: 18,
+      elevation: 3,
+    },
+    metricNumber: {
+      color: theme.primary,
+      fontSize: 48,
+      fontWeight: '900',
+      lineHeight: 52,
+    },
+    metricSlash: {
+      color: theme.text,
+      fontSize: 28,
+    },
+    metricLabel: {
+      ...typography.caption,
+      color: theme.textMuted,
+      marginTop: spacing.xs,
+    },
+    focusBlock: {
+      position: 'absolute',
+      right: spacing.lg,
+      top: spacing.lg,
+      alignItems: 'flex-end',
+    },
+    focusValue: {
+      color: theme.text,
+      fontSize: 28,
+      fontWeight: '900',
+      lineHeight: 32,
+    },
+    progressTrack: {
+      height: 12,
+      borderRadius: radius.pill,
+      backgroundColor: theme.surfaceAlt,
+      marginTop: spacing.lg,
+      overflow: 'hidden',
+    },
+    progressFill: {
+      height: '100%',
+      borderRadius: radius.pill,
+      backgroundColor: theme.accent,
+    },
+    mainCta: {
+      marginTop: spacing.lg,
+    },
+    secondaryGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.xs,
+      marginTop: spacing.md,
+    },
+    whisper: {
+      ...typography.caption,
+      color: theme.textMuted,
+      marginTop: spacing.lg,
+      marginBottom: spacing.md,
+    },
+    sectionHeader: {
+      alignItems: 'flex-end',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: spacing.md,
+      marginTop: spacing.sm,
+    },
+    sectionTitle: {
+      ...typography.section,
+      color: theme.text,
+    },
+    sectionHint: {
+      ...typography.caption,
+      color: theme.textMuted,
+    },
+  });
+}

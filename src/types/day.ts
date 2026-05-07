@@ -21,7 +21,7 @@ export interface DailyReview {
   date: ISODateString;
   rating?: 1 | 2 | 3 | 4 | 5;
   summary?: string;
-  unfinishedTaskIdsMovedToTomorrow: string[];
+  unfinishedTaskIdsMovedToTomorrow?: string[];
   createdAt: ISODateTimeString;
-  updatedAt: ISODateTimeString;
+  updatedAt?: ISODateTimeString;
 }

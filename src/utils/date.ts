@@ -13,6 +13,12 @@ export function fromDateKey(dateKey: ISODateString): Date {
   return new Date(year, month - 1, day);
 }
 
+export function addDays(dateKey: ISODateString, days: number): ISODateString {
+  const date = fromDateKey(dateKey);
+  date.setDate(date.getDate() + days);
+  return toDateKey(date);
+}
+
 export function formatChineseDate(dateKey: ISODateString): string {
   const date = fromDateKey(dateKey);
   return `${date.getMonth() + 1}月${date.getDate()}日 ${weekdayLabels[date.getDay()]}`;
@@ -21,6 +27,13 @@ export function formatChineseDate(dateKey: ISODateString): string {
 export function formatFullChineseDate(dateKey: ISODateString): string {
   const date = fromDateKey(dateKey);
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${weekdayLabels[date.getDay()]}`;
+}
+
+export function formatEditorialDate(dateKey: ISODateString): string {
+  const date = fromDateKey(dateKey);
+  return `${date.getFullYear()}.${pad2(date.getMonth() + 1)}.${pad2(date.getDate())} / ${
+    weekdayLabels[date.getDay()]
+  }`;
 }
 
 export function nowIso(): string {
