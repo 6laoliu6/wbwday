@@ -19,6 +19,7 @@ export function PrimaryButton({
 }: PrimaryButtonProps) {
   const { theme } = useTheme();
   const isFilled = variant === 'filled';
+  const isQuiet = variant === 'quiet';
 
   return (
     <Pressable
@@ -27,7 +28,7 @@ export function PrimaryButton({
       style={(state) => [
         styles.base,
         styles[`${size}Size`],
-        variant === 'filled'
+        isFilled
           ? {
               backgroundColor: theme.primary,
               shadowColor: theme.primary,
@@ -51,7 +52,7 @@ export function PrimaryButton({
               borderWidth: 1,
             }
           : undefined,
-        variant === 'quiet' ? styles.quiet : undefined,
+        isQuiet ? styles.quiet : undefined,
         state.pressed && !disabled ? styles.pressed : undefined,
         disabled ? styles.disabled : undefined,
         typeof style === 'function' ? style(state) : style,
@@ -59,14 +60,11 @@ export function PrimaryButton({
       {...props}
     >
       <Text
+        numberOfLines={1}
         style={[
           styles.label,
           {
-            color: isFilled
-              ? theme.textOnPrimary
-              : variant === 'quiet'
-                ? theme.textMuted
-                : theme.primary,
+            color: isFilled ? theme.textOnPrimary : isQuiet ? theme.textMuted : theme.primary,
           },
         ]}
       >
@@ -92,6 +90,7 @@ const styles = StyleSheet.create({
   },
   quiet: {
     backgroundColor: 'transparent',
+    minHeight: 42,
   },
   label: {
     ...typography.body,

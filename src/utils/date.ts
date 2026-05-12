@@ -1,6 +1,6 @@
-import type { ISODateString } from '@/types';
+﻿import type { ISODateString } from '@/types';
 
-const weekdayLabels = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+const weekdayLabels = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'] as const;
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
 
@@ -31,9 +31,7 @@ export function formatFullChineseDate(dateKey: ISODateString): string {
 
 export function formatEditorialDate(dateKey: ISODateString): string {
   const date = fromDateKey(dateKey);
-  return `${date.getFullYear()}.${pad2(date.getMonth() + 1)}.${pad2(date.getDate())} / ${
-    weekdayLabels[date.getDay()]
-  }`;
+  return `${date.getFullYear()}.${pad2(date.getMonth() + 1)}.${pad2(date.getDate())} / ${weekdayLabels[date.getDay()]}`;
 }
 
 export function nowIso(): string {

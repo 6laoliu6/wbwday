@@ -1,4 +1,4 @@
-import type { ISODateString, ISODateTimeString } from './day';
+﻿import type { ISODateString, ISODateTimeString } from './day';
 import type { CompletionStatus } from './proof';
 
 export type TaskImportance = 'high' | 'medium' | 'low';
@@ -8,7 +8,7 @@ export interface Task {
   id: string;
   date: ISODateString;
   title: string;
-  completionCriteria: string;
+  completionCriteria?: string;
   importance: TaskImportance;
   estimatedMinutes: number;
   status: TaskStatus;
@@ -33,7 +33,7 @@ export interface Task {
 export type CreateTaskInput = {
   date?: ISODateString;
   title: string;
-  completionCriteria: string;
+  completionCriteria?: string;
   importance: TaskImportance;
   estimatedMinutes: number;
   note?: string;

@@ -1,15 +1,9 @@
-import type { CompletionStatus, TaskImportance, TaskStatus } from '@/types';
+﻿import type { CompletionStatus, TaskImportance, TaskStatus } from '@/types';
 
 export const importanceLabels: Record<TaskImportance, string> = {
   high: '高',
   medium: '中',
   low: '低',
-};
-
-export const importanceNames: Record<TaskImportance, string> = {
-  high: '高重要',
-  medium: '中重要',
-  low: '低重要',
 };
 
 export const statusLabels: Record<TaskStatus, string> = {
@@ -24,3 +18,6 @@ export const completionStatusLabels: Record<CompletionStatus, string> = {
   partial: '部分完成',
   exceeded: '超额完成',
 };
+
+export const importanceNames = importanceLabels;
+

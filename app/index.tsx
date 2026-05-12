@@ -15,9 +15,14 @@ import DraggableFlatList, {
   type RenderItemParams,
 } from 'react-native-draggable-flatlist';
 
+import { GoalProgressGrid } from '@/components/GoalProgressGrid';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { TaskCard } from '@/components/TaskCard';
-import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
+import {
+  getActiveGoals,
+  getCheckInByGoalIdAndDate,
+  getCheckInsByGoalId,
+} from '@/storage/goalRepository';
 import {
   MAX_TOP_THREE_TASKS,
   deleteTask,
@@ -25,8 +30,10 @@ import {
   saveTaskOrder,
   updateTask,
 } from '@/storage/taskRepository';
-import type { Task, TaskStatus } from '@/types';
+import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
+import type { Goal, GoalCheckIn, Task, TaskStatus } from '@/types';
 import { formatEditorialDate, toDateKey } from '@/utils/date';
+import { getDaysUntilTarget, getGoalProgressPercent } from '@/utils/goalStats';
 import {
   hapticLight,
   hapticSelection,
@@ -55,20 +62,43 @@ export default function TodayScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [featuredGoal, setFeaturedGoal] = useState<Goal | undefined>();
+  const [featuredGoalCheckIns, setFeaturedGoalCheckIns] = useState<GoalCheckIn[]>([]);
+  const [featuredGoalTodayCheckIn, setFeaturedGoalTodayCheckIn] = useState<GoalCheckIn | undefined>();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const today = toDateKey();
 
-  const loadTasks = useCallback(async () => {
-    const nextTasks = await getTodayTasks();
-    setTasks(nextTasks);
-    setLoading(false);
-  }, []);
+  const loadHome = useCallback(async () => {
+    try {
+      const [nextTasks, activeGoals] = await Promise.all([getTodayTasks(), getActiveGoals()]);
+      const nextGoal = [...activeGoals].sort((a, b) => a.targetDate.localeCompare(b.targetDate))[0];
+
+      setTasks(nextTasks);
+      setFeaturedGoal(nextGoal);
+
+      if (nextGoal) {
+        const [checkIns, todayCheckIn] = await Promise.all([
+          getCheckInsByGoalId(nextGoal.id),
+          getCheckInByGoalIdAndDate(nextGoal.id, today),
+        ]);
+        setFeaturedGoalCheckIns(checkIns);
+        setFeaturedGoalTodayCheckIn(todayCheckIn);
+      } else {
+        setFeaturedGoalCheckIns([]);
+        setFeaturedGoalTodayCheckIn(undefined);
+      }
+    } catch {
+      Alert.alert('加载失败', '首页数据没有加载成功，请稍后再试。');
+    } finally {
+      setLoading(false);
+    }
+  }, [today]);
 
   useFocusEffect(
     useCallback(() => {
-      void loadTasks();
-    }, [loadTasks]),
+      void loadHome();
+    }, [loadHome]),
   );
 
   const completedCount = useMemo(
@@ -88,9 +118,9 @@ export default function TodayScreen() {
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    await loadTasks();
+    await loadHome();
     setRefreshing(false);
-  }, [loadTasks]);
+  }, [loadHome]);
 
   const changeStatus = useCallback(async (task: Task, status: TaskStatus) => {
     const updated = await updateTask(task.id, {
@@ -142,11 +172,11 @@ export default function TodayScreen() {
         onPress: async () => {
           await deleteTask(task.id);
           setTasks((current) => current.filter((item) => item.id !== task.id));
-          await loadTasks();
+          await loadHome();
         },
       },
     ]);
-  }, [loadTasks]);
+  }, [loadHome]);
 
   const saveOrder = useCallback(
     async ({ data }: { data: Task[] }) => {
@@ -205,7 +235,7 @@ export default function TodayScreen() {
               <View style={styles.heroText}>
                 <Text style={styles.brand}>WBWday</Text>
                 <Text style={styles.date}>{formatEditorialDate(today)}</Text>
-                <Text style={styles.heading}>今天，只完成真正重要的事。</Text>
+                <Text style={styles.heading}>{'今天，只完成真正重要的事。'}</Text>
               </View>
 
               <View style={styles.geometry} pointerEvents="none">
@@ -222,11 +252,11 @@ export default function TodayScreen() {
                   {completedCount}
                   <Text style={styles.metricSlash}> / {tasks.length}</Text>
                 </Text>
-                <Text style={styles.metricLabel}>已完成任务</Text>
+                <Text style={styles.metricLabel}>{'已完成任务'}</Text>
               </View>
               <View style={styles.focusBlock}>
                 <Text style={styles.focusValue}>{formatHomeFocus(totalFocusSeconds)}</Text>
-                <Text style={styles.metricLabel}>今日专注</Text>
+                <Text style={styles.metricLabel}>{'今日专注'}</Text>
               </View>
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
@@ -241,21 +271,32 @@ export default function TodayScreen() {
               size="large"
               style={styles.mainCta}
             >
-              开始晨间规划
+              {'开始晨间规划'}
             </PrimaryButton>
 
             <View style={styles.secondaryGrid}>
               <SecondaryEntry label="手动添加" onPress={() => router.push('/task/new' as Href)} />
+              <SecondaryEntry label="Goals" onPress={() => router.push('/goals' as Href)} />
+              <SecondaryEntry label="??" onPress={() => router.push('/ledger' as Href)} />
+              <SecondaryEntry label="??" onPress={() => router.push('/meals' as Href)} />
               <SecondaryEntry label="晚间复盘" onPress={() => router.push('/review' as Href)} />
               <SecondaryEntry label="历史记录" onPress={() => router.push('/history' as Href)} />
               <SecondaryEntry label="主题" onPress={() => router.push('/theme' as Href)} />
             </View>
 
-            <Text style={styles.whisper}>把今天切小一点，把注意力放亮一点。</Text>
+            {featuredGoal ? (
+              <FeaturedGoalCard
+                checkIns={featuredGoalCheckIns}
+                goal={featuredGoal}
+                todayCheckIn={featuredGoalTodayCheckIn}
+              />
+            ) : null}
+
+            <Text style={styles.whisper}>{'把今天切小一点，把注意力放亮一点。'}</Text>
 
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>今日任务</Text>
-              <Text style={styles.sectionHint}>长按拖动排序</Text>
+              <Text style={styles.sectionTitle}>{'今日任务'}</Text>
+              <Text style={styles.sectionHint}>{'长按拖动排序'}</Text>
             </View>
           </View>
         }
@@ -266,6 +307,40 @@ export default function TodayScreen() {
         renderItem={renderTask}
       />
     </SafeAreaView>
+  );
+}
+
+function FeaturedGoalCard({ checkIns, goal, todayCheckIn }: { checkIns: GoalCheckIn[]; goal: Goal; todayCheckIn?: GoalCheckIn }) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createFeaturedGoalStyles(theme), [theme]);
+  const daysLeft = getDaysUntilTarget(goal.targetDate);
+  const progressPercent = getGoalProgressPercent(goal, checkIns);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => router.push(`/goals/${goal.id}` as Href)}
+      style={({ pressed }) => [styles.card, pressed ? styles.pressed : undefined]}
+    >
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.kicker}>GOAL TRACK</Text>
+          <Text style={styles.title}>{goal.title}</Text>
+          <Text style={styles.meta}>{todayCheckIn ? '今日已打卡' : '今日未打卡'}</Text>
+        </View>
+        <View style={styles.countdown}>
+          <Text style={styles.countdownValue}>{daysLeft}</Text>
+          <Text style={styles.countdownLabel}>days</Text>
+        </View>
+      </View>
+      <View style={styles.progressRow}>
+        <Text style={styles.progressText}>{progressPercent}%</Text>
+        <View style={styles.track}>
+          <View style={[styles.fill, { width: `${progressPercent}%` }]} />
+        </View>
+      </View>
+      <GoalProgressGrid compact goal={goal} checkIns={checkIns} maxItems={28} />
+    </Pressable>
   );
 }
 
@@ -303,9 +378,9 @@ function EmptyState() {
         },
       ]}
     >
-      <Text style={[emptyStyles.title, { color: theme.text }]}>今天还没有立愿。</Text>
-      <Text style={[emptyStyles.text, { color: theme.textMuted }]}>
-        先写下一件真正重要的事，再给它一个清楚的完成标准。
+      <Text style={[emptyStyles.title, { color: theme.text }]}>{'今天还没有立愿。'}</Text>
+      <Text style={[emptyStyles.text, { color: theme.textMuted }]}> 
+        {'先写下一件真正重要的事，再给它一个清楚的完成标准。'}
       </Text>
       <View style={emptyStyles.actions}>
         <PrimaryButton
@@ -315,9 +390,9 @@ function EmptyState() {
           }}
           variant="soft"
         >
-          晨间规划
+          {'晨间规划'}
         </PrimaryButton>
-        <PrimaryButton onPress={() => router.push('/task/new' as Href)}>手动添加</PrimaryButton>
+        <PrimaryButton onPress={() => router.push('/task/new' as Href)}>{'手动添加'}</PrimaryButton>
       </View>
     </View>
   );
@@ -365,6 +440,39 @@ const emptyStyles = StyleSheet.create({
     marginTop: spacing.lg,
   },
 });
+
+function createFeaturedGoalStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    card: {
+      borderColor: theme.border,
+      borderRadius: radius.xlarge,
+      borderWidth: 1,
+      backgroundColor: theme.surface,
+      marginTop: spacing.md,
+      padding: spacing.md,
+      gap: spacing.sm,
+    },
+    pressed: { opacity: 0.86, transform: [{ scale: 0.99 }] },
+    header: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
+    kicker: { ...typography.micro, color: theme.primary, fontWeight: '900', marginBottom: spacing.xxs },
+    title: { ...typography.cardTitle, color: theme.text, fontWeight: '900' },
+    meta: { ...typography.caption, color: theme.textMuted, marginTop: spacing.xxs },
+    countdown: {
+      minWidth: 72,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radius.large,
+      backgroundColor: theme.surfaceAlt,
+      paddingVertical: spacing.xs,
+    },
+    countdownValue: { color: theme.primary, fontSize: 28, fontWeight: '900', lineHeight: 30 },
+    countdownLabel: { ...typography.micro, color: theme.textMuted, fontWeight: '900' },
+    progressRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    progressText: { ...typography.caption, color: theme.primary, fontWeight: '900', width: 44 },
+    track: { flex: 1, height: 8, borderRadius: radius.pill, backgroundColor: theme.surfaceAlt, overflow: 'hidden' },
+    fill: { height: '100%', borderRadius: radius.pill, backgroundColor: '#FF7AAE' },
+  });
+}
 
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({

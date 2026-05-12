@@ -1,4 +1,4 @@
-export type { DayRecord, DailyReview, ISODateString, ISODateTimeString } from './day';
+﻿export type { DayRecord, DailyReview, ISODateString, ISODateTimeString } from './day';
 export type { FocusMode, FocusSession, FocusSessionStatus } from './focus';
 export type { CompletionProof, CompletionProofSource, CompletionStatus } from './proof';
 export type { TaskDraft } from './planning';
@@ -10,3 +10,21 @@ export type {
   TaskStatus,
   UpdateTaskInput,
 } from './task';
+
+export type {
+  CreateGoalInput,
+  Goal,
+  GoalCheckIn,
+  GoalCheckInInput,
+  GoalCheckInStatus,
+  GoalStatus,
+  GoalWeeklyPlanDay,
+  UpdateGoalInput,
+} from './goal';
+
+
+export type { CreateLedgerEntryInput, LedgerCategory, LedgerEntry, LedgerEntryType, UpdateLedgerEntryInput } from './ledger';
+
+
+export type { MealMood, MealRecord, MealRecordInput, MealType, UpdateMealRecordInput } from './meal';
+

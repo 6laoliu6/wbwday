@@ -10,20 +10,21 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { ThemedChip } from '@/components/ThemedChip';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import { createTask } from '@/storage/taskRepository';
 import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
 import type { TaskImportance } from '@/types';
 import { hapticError, hapticSelection, hapticSuccess, hapticWarning } from '@/utils/haptics';
 
 const importanceOptions: Array<{ label: string; value: TaskImportance }> = [
-  { label: '高', value: 'high' },
-  { label: '中', value: 'medium' },
-  { label: '低', value: 'low' },
+  { label: '?', value: 'high' },
+  { label: '?', value: 'medium' },
+  { label: '?', value: 'low' },
 ];
 
 function isTopThreeLimitError(error: unknown): boolean {
@@ -42,14 +43,12 @@ export default function NewTaskScreen() {
   const [saving, setSaving] = useState(false);
 
   const canSubmit = useMemo(
-    () => title.trim().length > 0 && completionCriteria.trim().length > 0 && Number(estimatedMinutes) > 0,
+    () => title.trim().length > 0 && Number(estimatedMinutes) > 0,
     [completionCriteria, estimatedMinutes, title],
   );
 
   const submit = async () => {
-    if (!canSubmit || saving) {
-      return;
-    }
+    if (!canSubmit || saving) return;
 
     setSaving(true);
 
@@ -80,91 +79,44 @@ export default function NewTaskScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboard}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.keyboard}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.hero}>
             <View style={styles.heroShape} />
             <Text style={styles.kicker}>QUICK INTENT</Text>
-            <Text style={styles.title}>写下今天的一件事</Text>
-            <Text style={styles.description}>把“做什么”和“做到什么程度”分开写清楚。</Text>
+            <Text style={styles.title}>{'写下今天的一件事'}</Text>
+            <Text style={styles.description}>{'把“做什么”和“做到什么程度”分开写清楚。'}</Text>
           </View>
 
           <View style={styles.formPanel}>
-            <View style={styles.field}>
-              <Text style={styles.label}>任务名称</Text>
-              <TextInput
-                onChangeText={setTitle}
-                placeholder="例如：完成第一阶段 App 骨架"
-                placeholderTextColor={theme.textMuted}
-                selectionColor={theme.primary}
-                style={styles.input}
-                value={title}
-              />
-            </View>
+            <ThemedTextInput label="????" onChangeText={setTitle} placeholder="????????? App ??" value={title} />
+            <ThemedTextInput label="????????" multiline onChangeText={setCompletionCriteria} placeholder="????????????????" value={completionCriteria} />
 
             <View style={styles.field}>
-              <Text style={styles.label}>完成标准</Text>
-              <TextInput
-                multiline
-                onChangeText={setCompletionCriteria}
-                placeholder="写清楚做到什么程度才算完成"
-                placeholderTextColor={theme.textMuted}
-                selectionColor={theme.primary}
-                style={[styles.input, styles.textArea]}
-                textAlignVertical="top"
-                value={completionCriteria}
-              />
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>重要程度</Text>
+              <Text style={styles.label}>{'重要程度'}</Text>
               <View style={styles.segmented}>
-                {importanceOptions.map((option) => {
-                  const active = importance === option.value;
-
-                  return (
-                    <Pressable
-                      accessibilityRole="button"
-                      key={option.value}
-                      onPress={() => {
-                        setImportance(option.value);
-                        void hapticSelection();
-                      }}
-                      style={({ pressed }) => [
-                        styles.segment,
-                        active ? styles.segmentActive : undefined,
-                        pressed ? styles.pressed : undefined,
-                      ]}
-                    >
-                      <Text style={[styles.segmentText, active ? styles.segmentTextActive : undefined]}>
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                {importanceOptions.map((option) => (
+                  <ThemedChip
+                    active={importance === option.value}
+                    key={option.value}
+                    label={option.label}
+                    onPress={() => {
+                      setImportance(option.value);
+                      void hapticSelection();
+                    }}
+                    style={styles.flexChip}
+                    tone="primary"
+                  />
+                ))}
               </View>
             </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>预计时间</Text>
-              <TextInput
-                keyboardType="number-pad"
-                onChangeText={setEstimatedMinutes}
-                placeholder="分钟"
-                placeholderTextColor={theme.textMuted}
-                selectionColor={theme.primary}
-                style={styles.input}
-                value={estimatedMinutes}
-              />
-            </View>
+            <ThemedTextInput keyboardType="number-pad" label="预计时间" onChangeText={setEstimatedMinutes} placeholder="分钟" value={estimatedMinutes} />
 
             <View style={styles.switchRow}>
               <View style={styles.switchCopy}>
-                <Text style={styles.label}>设为今日三件大事</Text>
-                <Text style={styles.helper}>会在任务卡片上突出显示</Text>
+                <Text style={styles.label}>{'设为今日三件大事'}</Text>
+                <Text style={styles.helper}>{'会在任务卡片上更醒目地显示'}</Text>
               </View>
               <Switch
                 onValueChange={(value) => {
@@ -177,19 +129,7 @@ export default function NewTaskScreen() {
               />
             </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>备注</Text>
-              <TextInput
-                multiline
-                onChangeText={setNote}
-                placeholder="可选：补充背景、限制或提醒"
-                placeholderTextColor={theme.textMuted}
-                selectionColor={theme.primary}
-                style={[styles.input, styles.textArea]}
-                textAlignVertical="top"
-                value={note}
-              />
-            </View>
+            <ThemedTextInput label="备注" multiline onChangeText={setNote} placeholder="可选：补充背景、限制或提醒" value={note} />
           </View>
 
           <PrimaryButton disabled={!canSubmit || saving} onPress={submit} size="large">
@@ -203,17 +143,9 @@ export default function NewTaskScreen() {
 
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({
-    screen: {
-      flex: 1,
-      backgroundColor: theme.background,
-    },
-    keyboard: {
-      flex: 1,
-    },
-    content: {
-      padding: spacing.lg,
-      paddingBottom: spacing.xl,
-    },
+    screen: { flex: 1, backgroundColor: theme.background },
+    keyboard: { flex: 1 },
+    content: { padding: spacing.lg, paddingBottom: spacing.xl },
     hero: {
       overflow: 'hidden',
       borderColor: theme.border,
@@ -233,24 +165,9 @@ function createStyles(theme: AppTheme) {
       backgroundColor: theme.accent,
       transform: [{ rotate: '-10deg' }],
     },
-    kicker: {
-      ...typography.micro,
-      color: theme.primary,
-      fontWeight: '900',
-      marginBottom: spacing.xs,
-    },
-    title: {
-      ...typography.title,
-      color: theme.text,
-      fontWeight: '900',
-      marginBottom: spacing.sm,
-    },
-    description: {
-      ...typography.body,
-      color: theme.textMuted,
-      lineHeight: 22,
-      maxWidth: '86%',
-    },
+    kicker: { ...typography.micro, color: theme.primary, fontWeight: '900', marginBottom: spacing.xs },
+    title: { ...typography.title, color: theme.text, fontWeight: '900', marginBottom: spacing.sm },
+    description: { ...typography.body, color: theme.textMuted, lineHeight: 22, maxWidth: '86%' },
     formPanel: {
       borderColor: theme.border,
       borderRadius: radius.xlarge,
@@ -259,61 +176,11 @@ function createStyles(theme: AppTheme) {
       marginBottom: spacing.md,
       padding: spacing.md,
     },
-    field: {
-      marginBottom: spacing.md,
-    },
-    label: {
-      ...typography.body,
-      color: theme.text,
-      fontWeight: '900',
-      marginBottom: spacing.xs,
-    },
-    helper: {
-      ...typography.caption,
-      color: theme.textMuted,
-      lineHeight: 18,
-    },
-    input: {
-      minHeight: 50,
-      borderColor: theme.border,
-      borderRadius: radius.medium,
-      borderWidth: 1,
-      backgroundColor: theme.surfaceAlt,
-      color: theme.text,
-      fontSize: 16,
-      lineHeight: 23,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
-    },
-    textArea: {
-      minHeight: 106,
-    },
-    segmented: {
-      flexDirection: 'row',
-      gap: spacing.sm,
-    },
-    segment: {
-      flex: 1,
-      minHeight: 46,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderColor: theme.border,
-      borderRadius: radius.pill,
-      borderWidth: 1,
-      backgroundColor: theme.surfaceAlt,
-    },
-    segmentActive: {
-      borderColor: theme.primary,
-      backgroundColor: theme.primary,
-    },
-    segmentText: {
-      ...typography.body,
-      color: theme.text,
-      fontWeight: '900',
-    },
-    segmentTextActive: {
-      color: theme.textOnPrimary,
-    },
+    field: { marginBottom: spacing.md },
+    label: { ...typography.caption, color: theme.text, fontWeight: '900', marginBottom: spacing.xs },
+    helper: { ...typography.caption, color: theme.textMuted, lineHeight: 18 },
+    segmented: { flexDirection: 'row', gap: spacing.sm },
+    flexChip: { flex: 1 },
     switchRow: {
       alignItems: 'center',
       borderColor: theme.border,
@@ -325,13 +192,6 @@ function createStyles(theme: AppTheme) {
       marginBottom: spacing.md,
       padding: spacing.md,
     },
-    switchCopy: {
-      flex: 1,
-      paddingRight: spacing.sm,
-    },
-    pressed: {
-      opacity: 0.84,
-      transform: [{ scale: 0.985 }],
-    },
+    switchCopy: { flex: 1, paddingRight: spacing.sm },
   });
 }

@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { STORAGE_KEYS } from './storageKeys';
 import { addDays, nowIso, toDateKey } from '@/utils/date';
@@ -110,7 +110,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
     id: createId('task'),
     date,
     title: input.title.trim(),
-    completionCriteria: input.completionCriteria.trim(),
+    completionCriteria: input.completionCriteria?.trim() ?? '',
     importance: input.importance,
     estimatedMinutes: input.estimatedMinutes,
     status: 'not_started',
@@ -135,7 +135,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
 
 export async function createTasks(inputs: CreateTaskInput[]): Promise<Task[]> {
   const validInputs = inputs.filter(
-    (input) => input.title.trim().length > 0 && input.completionCriteria.trim().length > 0,
+    (input) => input.title.trim().length > 0 && input.estimatedMinutes > 0,
   );
 
   if (validInputs.length === 0) {
@@ -166,7 +166,7 @@ export async function createTasks(inputs: CreateTaskInput[]): Promise<Task[]> {
       id: createId('task'),
       date,
       title: input.title.trim(),
-      completionCriteria: input.completionCriteria.trim(),
+      completionCriteria: input.completionCriteria?.trim() ?? '',
       importance: input.importance,
       estimatedMinutes: input.estimatedMinutes,
       status: 'not_started',
@@ -215,7 +215,7 @@ export async function updateTask(id: string, input: UpdateTaskInput): Promise<Ta
     ...target,
     ...input,
     title: input.title?.trim() ?? target.title,
-    completionCriteria: input.completionCriteria?.trim() ?? target.completionCriteria,
+    completionCriteria: input.completionCriteria !== undefined ? input.completionCriteria.trim() : (target.completionCriteria ?? ''),
     note: input.note?.trim() ?? target.note,
     focusSeconds: nextFocusSeconds,
     focusMinutes: secondsToMinutes(nextFocusSeconds),
@@ -260,7 +260,7 @@ export async function duplicateTaskToDate(taskId: string, date: ISODateString): 
   return createTask({
     date,
     title: sourceTask.title,
-    completionCriteria: sourceTask.completionCriteria,
+    completionCriteria: sourceTask.completionCriteria ?? '',
     importance: sourceTask.importance,
     estimatedMinutes: sourceTask.estimatedMinutes,
     note: sourceTask.note,
@@ -328,3 +328,6 @@ export async function getTaskDates(): Promise<ISODateString[]> {
   const tasks = await readTasks();
   return Array.from(new Set(tasks.map((task) => task.date))).sort((a, b) => b.localeCompare(a));
 }
+
+
+
