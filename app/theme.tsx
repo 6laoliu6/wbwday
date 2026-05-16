@@ -62,7 +62,7 @@ export default function ThemeScreen() {
                     </View>
                     {selected ? (
                       <View style={[styles.check, { backgroundColor: preset.primary }]}>
-                        <Text style={[styles.checkText, { color: preset.textOnPrimary }]}>?</Text>
+                        <Text style={[styles.checkText, { color: preset.textOnPrimary }]}>已</Text>
                       </View>
                     ) : null}
                   </View>

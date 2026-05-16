@@ -125,7 +125,7 @@ export default function ProofScreen() {
             <View style={styles.heroMark} />
             <Text style={styles.kicker}>{'给今天一个证明'}</Text>
             <Text style={styles.title}>{task.title}</Text>
-            {task.completionCriteria ? <Text style={styles.criteria}>?????{task.completionCriteria}</Text> : null}
+            {task.completionCriteria ? <Text style={styles.criteria}>完成标准：{task.completionCriteria}</Text> : null}
             <Text style={styles.focusText}>{'累计专注 '} {formatFocusDuration(getTaskFocusSeconds(task))}</Text>
           </View>
 

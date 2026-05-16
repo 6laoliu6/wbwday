@@ -9,6 +9,7 @@ import { createTasks, getTasksByDate } from '@/storage/taskRepository';
 import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
 import type { Goal, GoalWeeklyPlanDay, ISODateString } from '@/types';
 import { addDays, toDateKey } from '@/utils/date';
+import { dateInputToDateKey, toDateInputValue } from '@/utils/dateInput';
 import { hapticError, hapticSelection, hapticSuccess, hapticWarning } from '@/utils/haptics';
 import { parseGoalWeeklyPlan } from '@/utils/parseGoalWeeklyPlan';
 
@@ -31,10 +32,6 @@ function getNextMonday(): ISODateString {
   return toDateKey(next);
 }
 
-function isDateKey(value: string): value is ISODateString {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00`).getTime());
-}
-
 function getPlanDate(weekStart: ISODateString, weekday: number): ISODateString {
   return addDays(weekStart, weekday - 1);
 }
@@ -47,7 +44,7 @@ export default function ImportWeeklyPlanScreen() {
   const [goal, setGoal] = useState<Goal | undefined>();
   const [rawText, setRawText] = useState('');
   const [drafts, setDrafts] = useState<WeeklyDraft[]>([]);
-  const [weekStart, setWeekStart] = useState(getNextMonday());
+  const [weekStart, setWeekStart] = useState(toDateInputValue(getNextMonday()));
   const [busy, setBusy] = useState(false);
 
   const loadGoal = async (): Promise<Goal | undefined> => {
@@ -88,9 +85,10 @@ export default function ImportWeeklyPlanScreen() {
       Alert.alert('没有找到这个 Goal');
       return;
     }
-    if (!isDateKey(weekStart)) {
+    const normalizedWeekStart = dateInputToDateKey(weekStart);
+    if (!normalizedWeekStart) {
       void hapticWarning();
-      Alert.alert('生成周请使用 YYYY-MM-DD 格式');
+      Alert.alert('生成周请使用 2026 08 27 这样的格式');
       return;
     }
 
@@ -106,7 +104,7 @@ export default function ImportWeeklyPlanScreen() {
       let skipped = 0;
       const inputs = [];
       for (const draft of enabledDrafts) {
-        const date = getPlanDate(weekStart, draft.weekday);
+        const date = getPlanDate(normalizedWeekStart, draft.weekday);
         const existing = await getTasksByDate(date);
         const title = draft.taskTitle.trim();
         if (existing.some((task) => task.title.trim() === title)) {
@@ -162,13 +160,14 @@ export default function ImportWeeklyPlanScreen() {
 
           {drafts.length > 0 ? (
             <View style={styles.card}>
-              <ThemedTextInput label="生成周的周一日期" onChangeText={setWeekStart} placeholder="YYYY-MM-DD" value={weekStart} />
+              <ThemedTextInput label="生成周的周一日期" onChangeText={setWeekStart} placeholder="2026 08 27" value={weekStart} />
               <Text style={styles.hint}>默认生成到下一周。每一天会落到对应日期，不会全部生成到今天。</Text>
             </View>
           ) : null}
 
           {drafts.map((draft) => {
-            const date = isDateKey(weekStart) ? getPlanDate(weekStart, draft.weekday) : '日期格式错误';
+            const normalizedPreviewDate = dateInputToDateKey(weekStart);
+            const date = normalizedPreviewDate ? toDateInputValue(getPlanDate(normalizedPreviewDate, draft.weekday)) : '日期格式错误';
             return (
               <View key={draft.weekday} style={styles.dayCard}>
                 <View style={styles.dayHeader}>

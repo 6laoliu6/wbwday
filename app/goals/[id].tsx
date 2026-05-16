@@ -130,18 +130,18 @@ export default function GoalDetailScreen() {
         <View style={styles.weeklyCard}>
           <View style={styles.weeklyHeader}>
             <View style={styles.weeklyCopy}>
-              <Text style={styles.sectionTitle}>???</Text>
-              <Text style={styles.sectionHint}>??????????????????</Text>
+              <Text style={styles.sectionTitle}>周计划</Text>
+              <Text style={styles.sectionHint}>把一整周安排拆到对应日期的每日任务。</Text>
             </View>
             <PrimaryButton onPress={() => router.push(`/goals/${goal.id}/import-weekly` as Href)} variant="soft">
-              {goal.weeklyPlan?.length ? '????' : '?????'}
+              {goal.weeklyPlan?.length ? '重新导入' : '导入周计划'}
             </PrimaryButton>
           </View>
           {goal.weeklyPlan?.length ? (
             <View style={styles.weeklyList}>
               {goal.weeklyPlan.slice(0, 7).map((day) => (
                 <Text key={day.weekday} style={styles.weeklyItem} numberOfLines={1}>
-                  {day.weekdayLabel}?{day.taskTitle || day.title}
+                  {day.weekdayLabel}：{day.taskTitle || day.title}
                 </Text>
               ))}
             </View>

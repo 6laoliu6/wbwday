@@ -6,19 +6,15 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ThemedTextInput } from '@/components/ThemedTextInput';
 import { createGoal } from '@/storage/goalRepository';
 import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
-import type { ISODateString } from '@/types';
 import { toDateKey } from '@/utils/date';
+import { dateInputToDateKey, toDateInputValue } from '@/utils/dateInput';
 import { hapticError, hapticSuccess } from '@/utils/haptics';
-
-function isDateKey(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00`).getTime());
-}
 
 export default function NewGoalScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [title, setTitle] = useState('');
-  const [startDate, setStartDate] = useState(toDateKey());
+  const [startDate, setStartDate] = useState(toDateInputValue(toDateKey()));
   const [targetDate, setTargetDate] = useState('');
   const [dailyGoal, setDailyGoal] = useState('');
   const [description, setDescription] = useState('');
@@ -28,19 +24,19 @@ export default function NewGoalScreen() {
     if (saving) return;
 
     const normalizedTitle = title.trim();
-    const normalizedStartDate = startDate.trim();
-    const normalizedTargetDate = targetDate.trim();
+    const normalizedStartDate = dateInputToDateKey(startDate);
+    const normalizedTargetDate = dateInputToDateKey(targetDate);
 
     if (normalizedTitle.length === 0) {
       Alert.alert('先写下 Goal 名称。');
       return;
     }
-    if (!isDateKey(normalizedStartDate)) {
-      Alert.alert('开始日期请使用 YYYY-MM-DD。');
+    if (!normalizedStartDate) {
+      Alert.alert('开始日期请使用 2026 08 27 这样的格式。');
       return;
     }
-    if (!isDateKey(normalizedTargetDate)) {
-      Alert.alert('目标日期请使用 YYYY-MM-DD。');
+    if (!normalizedTargetDate) {
+      Alert.alert('目标日期请使用 2026 08 27 这样的格式。');
       return;
     }
     if (normalizedTargetDate < normalizedStartDate) {
@@ -53,8 +49,8 @@ export default function NewGoalScreen() {
     try {
       const goal = await createGoal({
         title: normalizedTitle,
-        startDate: normalizedStartDate as ISODateString,
-        targetDate: normalizedTargetDate as ISODateString,
+        startDate: normalizedStartDate,
+        targetDate: normalizedTargetDate,
         dailyGoal: dailyGoal.trim() || undefined,
         description: description.trim() || undefined,
       });
@@ -76,14 +72,14 @@ export default function NewGoalScreen() {
           <View style={styles.hero}>
             <View style={styles.heroShape} />
             <Text style={styles.kicker}>NEW GOAL</Text>
-            <Text style={styles.title}>{'写下一个长期目标'}</Text>
-            <Text style={styles.subtitle}>{'它不需要今天完成，但今天可以靠近一点。'}</Text>
+            <Text style={styles.title}>写下一个长期目标</Text>
+            <Text style={styles.subtitle}>它不需要今天完成，但今天可以靠近一点。</Text>
           </View>
 
           <View style={styles.form}>
             <ThemedTextInput label="Goal 名称" value={title} onChangeText={setTitle} placeholder="英语四级" />
-            <ThemedTextInput label="开始日期" value={startDate} onChangeText={setStartDate} placeholder="YYYY-MM-DD" />
-            <ThemedTextInput label="目标日期" value={targetDate} onChangeText={setTargetDate} placeholder="2026-06-15" />
+            <ThemedTextInput label="开始日期" value={startDate} onChangeText={setStartDate} placeholder="2026 08 27" />
+            <ThemedTextInput label="目标日期" value={targetDate} onChangeText={setTargetDate} placeholder="2026 08 27" />
             <ThemedTextInput label="每日行动" value={dailyGoal} onChangeText={setDailyGoal} placeholder="每天背单词、听力、阅读" multiline />
             <ThemedTextInput label="备注" value={description} onChangeText={setDescription} placeholder="6 月考试前完成基础复习" multiline />
           </View>

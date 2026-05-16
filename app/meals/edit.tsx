@@ -9,6 +9,7 @@ import { getMealRecordByDateAndType, saveMealRecord } from '@/storage/mealReposi
 import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
 import type { MealMood, MealType } from '@/types';
 import { toDateKey } from '@/utils/date';
+import { dateInputToDateKey, toDateInputValue } from '@/utils/dateInput';
 import { hapticError, hapticSelection, hapticSuccess, hapticWarning } from '@/utils/haptics';
 import { getMealMoodLabel, getMealTypeLabel } from '@/utils/mealStats';
 
@@ -28,7 +29,7 @@ export default function EditMealScreen() {
   const params = useLocalSearchParams<{ date?: string; mealType?: string; content?: string; rawText?: string }>();
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const [date, setDate] = useState(params.date ?? toDateKey());
+  const [date, setDate] = useState(toDateInputValue(params.date ?? toDateKey()));
   const [mealType, setMealType] = useState<MealType>(isMealType(params.mealType) ? params.mealType : 'breakfast');
   const [content, setContent] = useState(params.content ? decodeURIComponent(params.content) : '');
   const [time, setTime] = useState(getCurrentTime());
@@ -38,7 +39,9 @@ export default function EditMealScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    void getMealRecordByDateAndType(date, mealType).then((record) => {
+    const normalizedDate = dateInputToDateKey(date);
+    if (!normalizedDate) return;
+    void getMealRecordByDateAndType(normalizedDate, mealType).then((record) => {
       if (!record) return;
       setContent(record.content);
       setTime(record.time || getCurrentTime());
@@ -48,6 +51,13 @@ export default function EditMealScreen() {
   }, [date, mealType]);
 
   const save = async () => {
+    const normalizedDate = dateInputToDateKey(date);
+    if (!normalizedDate) {
+      void hapticWarning();
+      Alert.alert('日期请使用 2026 08 27 这样的格式。');
+      return;
+    }
+
     if (content.trim().length === 0) {
       void hapticWarning();
       Alert.alert('先写下这一餐吃了什么');
@@ -56,7 +66,7 @@ export default function EditMealScreen() {
     setSaving(true);
     try {
       await saveMealRecord({
-        date,
+        date: normalizedDate,
         mealType,
         title: title.trim() || undefined,
         content,

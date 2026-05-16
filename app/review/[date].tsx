@@ -6,6 +6,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ProofPhotoWall } from '@/components/ProofPhotoWall';
 import { RatingSelector } from '@/components/RatingSelector';
 import { ReviewTaskItem } from '@/components/ReviewTaskItem';
+import { VoiceInputButton } from '@/components/VoiceInputButton';
 import { getFocusSessionsByDate } from '@/storage/focusRepository';
 import { getCompletionProofsByDate } from '@/storage/proofRepository';
 import { getReviewByDate, updateReview } from '@/storage/reviewRepository';
@@ -148,6 +149,12 @@ export default function ReviewByDateScreen() {
 
         <Section title="今日总结" theme={theme}>
           <TextInput multiline onChangeText={setSummary} placeholder="写一句给今天的自己。" placeholderTextColor={theme.textMuted} selectionColor={theme.primary} style={styles.summaryInput} textAlignVertical="top" value={summary} />
+          <View style={styles.summaryVoice}>
+            <VoiceInputButton
+              label="语音写总结"
+              onTranscript={(text) => setSummary((current) => (current.trim() ? `${current.trim()}\n${text}` : text))}
+            />
+          </View>
         </Section>
 
         <PrimaryButton disabled={saving} onPress={saveDailyReview} size="large">{saving ? '保存中' : review ? '更新今日复盘' : '保存今日复盘'}</PrimaryButton>
@@ -187,6 +194,7 @@ function createStyles(theme: AppTheme) {
     softNote: { ...typography.caption, color: theme.textMuted, fontWeight: '800', marginBottom: spacing.sm },
     movedText: { alignSelf: 'flex-start', borderRadius: radius.pill, backgroundColor: theme.surfaceAlt, color: theme.success, fontSize: 12, fontWeight: '900', marginBottom: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
     summaryInput: { minHeight: 124, borderColor: theme.border, borderRadius: radius.large, borderWidth: 1, backgroundColor: theme.surfaceAlt, color: theme.text, fontSize: 16, lineHeight: 24, padding: spacing.md },
+    summaryVoice: { marginTop: spacing.sm },
     empty: { flex: 1, justifyContent: 'center', padding: spacing.lg },
     emptyTitle: { ...typography.section, color: theme.text, fontWeight: '900', marginBottom: spacing.md, textAlign: 'center' },
   });
