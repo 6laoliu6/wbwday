@@ -22,9 +22,9 @@ import type { TaskImportance } from '@/types';
 import { hapticError, hapticSelection, hapticSuccess, hapticWarning } from '@/utils/haptics';
 
 const importanceOptions: Array<{ label: string; value: TaskImportance }> = [
-  { label: '?', value: 'high' },
-  { label: '?', value: 'medium' },
-  { label: '?', value: 'low' },
+  { label: '高', value: 'high' },
+  { label: '中', value: 'medium' },
+  { label: '低', value: 'low' },
 ];
 
 function isTopThreeLimitError(error: unknown): boolean {
@@ -89,8 +89,8 @@ export default function NewTaskScreen() {
           </View>
 
           <View style={styles.formPanel}>
-            <ThemedTextInput label="????" onChangeText={setTitle} placeholder="????????? App ??" value={title} />
-            <ThemedTextInput label="????????" multiline onChangeText={setCompletionCriteria} placeholder="????????????????" value={completionCriteria} />
+            <ThemedTextInput label="任务名称" onChangeText={setTitle} placeholder="例如：完成第一阶段 App 骨架" value={title} />
+            <ThemedTextInput label="完成标准（可选）" multiline onChangeText={setCompletionCriteria} placeholder="可选：写清楚做到什么程度才算完成" value={completionCriteria} />
 
             <View style={styles.field}>
               <Text style={styles.label}>{'重要程度'}</Text>

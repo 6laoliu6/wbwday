@@ -28,3 +28,7 @@ export type { CreateLedgerEntryInput, LedgerCategory, LedgerEntry, LedgerEntryTy
 
 export type { MealMood, MealRecord, MealRecordInput, MealType, UpdateMealRecordInput } from './meal';
 
+export type { WeatherSnapshot } from './weather';
+
+export type { NewsArticle } from './news';
+

@@ -8,6 +8,10 @@
   goalCheckIns: '@wbwday/goal-check-ins/v1',
   ledgerEntries: '@wbwday/ledger-entries/v1',
   mealRecords: '@wbwday/meal-records/v1',
+  weatherSnapshot: '@wbwday/weather-snapshot/v1',
+  weatherPermissionPrompted: '@wbwday/weather-permission-prompted/v1',
+  newsArticles: '@wbwday/news-articles/v1',
+  newsApiKey: '@wbwday/news-api-key/v1',
 } as const;
 
 

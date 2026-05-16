@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Pressable, SafeAreaView, ScrollView, StyleShe
 
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ThemedTextInput } from '@/components/ThemedTextInput';
+import { VoiceInputButton } from '@/components/VoiceInputButton';
 import { getMealRecordsByDate } from '@/storage/mealRepository';
 import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
 import type { MealRecord, MealType } from '@/types';
@@ -71,6 +72,7 @@ export default function MealsScreen() {
           <Text style={styles.sectionTitle}>快速记录</Text>
           <Text style={styles.hint}>先用文字模拟语音输入，后续可接真实语音识别。</Text>
           <ThemedTextInput onChangeText={setQuickText} placeholder="例如：早餐吃了鸡蛋牛奶面包" value={quickText} />
+          <VoiceInputButton label="说一餐" onTranscript={setQuickText} />
           <PrimaryButton onPress={recognize} variant="soft">识别并记录</PrimaryButton>
         </View>
       </ScrollView>

@@ -5,10 +5,12 @@ import { Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StyleS
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ThemedChip } from '@/components/ThemedChip';
 import { ThemedTextInput } from '@/components/ThemedTextInput';
+import { VoiceInputButton } from '@/components/VoiceInputButton';
 import { createLedgerEntry } from '@/storage/ledgerRepository';
 import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
 import type { LedgerCategory, LedgerEntryType } from '@/types';
 import { toDateKey } from '@/utils/date';
+import { dateInputToDateKey, toDateInputValue } from '@/utils/dateInput';
 import { hapticError, hapticSelection, hapticSuccess, hapticWarning } from '@/utils/haptics';
 import { ledgerCategoryLabels } from '@/utils/ledgerStats';
 import { parseLedgerText } from '@/utils/parseLedgerText';
@@ -21,7 +23,7 @@ export default function NewLedgerEntryScreen() {
   const [type, setType] = useState<LedgerEntryType>('expense');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<LedgerCategory>('other');
-  const [date, setDate] = useState(toDateKey());
+  const [date, setDate] = useState(toDateInputValue(toDateKey()));
   const [note, setNote] = useState('');
   const [rawText, setRawText] = useState('');
   const [saving, setSaving] = useState(false);
@@ -36,7 +38,7 @@ export default function NewLedgerEntryScreen() {
     setType(parsed.type);
     setAmount(String(parsed.amount));
     setCategory(parsed.category);
-    setDate(parsed.date);
+    setDate(toDateInputValue(parsed.date));
     setNote(parsed.note ?? '');
     void hapticSelection();
   };
@@ -48,6 +50,13 @@ export default function NewLedgerEntryScreen() {
       Alert.alert('金额要大于 0');
       return;
     }
+    const normalizedDate = dateInputToDateKey(date);
+    if (!normalizedDate) {
+      void hapticWarning();
+      Alert.alert('日期请使用 2026 08 27 这样的格式。');
+      return;
+    }
+
     setSaving(true);
     try {
       await createLedgerEntry({
@@ -55,7 +64,7 @@ export default function NewLedgerEntryScreen() {
         amount: numericAmount,
         category,
         categoryLabel: ledgerCategoryLabels[category],
-        date,
+        date: normalizedDate,
         note: note.trim() || undefined,
         source: rawText.trim() ? 'voice-text' : 'manual',
         rawText: rawText.trim() || undefined,
@@ -81,6 +90,7 @@ export default function NewLedgerEntryScreen() {
 
           <View style={styles.card}>
             <ThemedTextInput label="语音记账" onChangeText={setRawText} placeholder="例如：今天午饭花了18块" value={rawText} />
+            <VoiceInputButton label="说一笔账" onTranscript={setRawText} />
             <PrimaryButton onPress={recognize} variant="soft">识别并填入</PrimaryButton>
           </View>
 
@@ -91,7 +101,7 @@ export default function NewLedgerEntryScreen() {
               <ThemedChip active={type === 'income'} label="收入" onPress={() => { setType('income'); void hapticSelection(); }} style={styles.flexChip} tone="success" />
             </View>
             <ThemedTextInput keyboardType="decimal-pad" label="金额" onChangeText={setAmount} placeholder="18" value={amount} />
-            <ThemedTextInput label="日期" onChangeText={setDate} placeholder="YYYY-MM-DD" value={date} />
+            <ThemedTextInput label="日期" onChangeText={setDate} placeholder="2026 08 27" value={date} />
             <Text style={styles.label}>分类</Text>
             <View style={styles.categoryGrid}>
               {categories.map((item) => (

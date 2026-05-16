@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -19,6 +20,22 @@ import { GoalProgressGrid } from '@/components/GoalProgressGrid';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { TaskCard } from '@/components/TaskCard';
 import {
+  fetchTopNews,
+  getCachedNews,
+  getNewsApiKey,
+} from '@/services/newsService';
+import {
+  fetchWeatherByCoords,
+  getCachedWeather,
+  getCurrentLocation,
+  getLocationPermission,
+  getWeatherPermissionPrompted,
+  getWeatherSuggestion,
+  requestLocationPermission,
+  saveCachedWeather,
+  saveWeatherPermissionPrompted,
+} from '@/services/weatherService';
+import {
   getActiveGoals,
   getCheckInByGoalIdAndDate,
   getCheckInsByGoalId,
@@ -31,7 +48,7 @@ import {
   updateTask,
 } from '@/storage/taskRepository';
 import { radius, spacing, typography, type AppTheme, useTheme } from '@/theme';
-import type { Goal, GoalCheckIn, Task, TaskStatus } from '@/types';
+import type { Goal, GoalCheckIn, NewsArticle, Task, TaskStatus, WeatherSnapshot } from '@/types';
 import { formatEditorialDate, toDateKey } from '@/utils/date';
 import { getDaysUntilTarget, getGoalProgressPercent } from '@/utils/goalStats';
 import {
@@ -58,6 +75,15 @@ function formatHomeFocus(seconds: number): string {
   return restMinutes > 0 ? `${hours}h ${restMinutes}m` : `${hours}h`;
 }
 
+function formatTemperature(value?: number): string {
+  return typeof value === 'number' ? `${Math.round(value)}°` : '--';
+}
+
+function formatWeatherUpdatedAt(fetchedAt?: string): string {
+  if (!fetchedAt) return '';
+  return new Date(fetchedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
 export default function TodayScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -65,6 +91,14 @@ export default function TodayScreen() {
   const [featuredGoal, setFeaturedGoal] = useState<Goal | undefined>();
   const [featuredGoalCheckIns, setFeaturedGoalCheckIns] = useState<GoalCheckIn[]>([]);
   const [featuredGoalTodayCheckIn, setFeaturedGoalTodayCheckIn] = useState<GoalCheckIn | undefined>();
+  const [weather, setWeather] = useState<WeatherSnapshot | undefined>();
+  const [weatherMessage, setWeatherMessage] = useState('正在准备天气');
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [news, setNews] = useState<NewsArticle[]>([]);
+  const [newsMessage, setNewsMessage] = useState('暂未配置新闻 API Key。');
+  const [newsLoading, setNewsLoading] = useState(false);
+  const [hasNewsApiKey, setHasNewsApiKey] = useState(false);
+  const [newsExpanded, setNewsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const today = toDateKey();
@@ -95,10 +129,85 @@ export default function TodayScreen() {
     }
   }, [today]);
 
+  const loadWeather = useCallback(async (forcePermissionRequest = false) => {
+    setWeatherLoading(true);
+    const cachedWeather = await getCachedWeather();
+    if (cachedWeather) {
+      setWeather(cachedWeather);
+      setWeatherMessage('显示最近一次天气');
+    }
+
+    try {
+      const alreadyPrompted = await getWeatherPermissionPrompted();
+      let permission = await getLocationPermission();
+
+      if (!permission.granted && (!alreadyPrompted || forcePermissionRequest)) {
+        permission = await requestLocationPermission();
+        await saveWeatherPermissionPrompted();
+      }
+
+      if (!permission.granted) {
+        setWeatherMessage('未开启定位，天气暂时显示占位。');
+        return;
+      }
+
+      const location = await getCurrentLocation();
+      const nextWeather = await fetchWeatherByCoords(location.coords.latitude, location.coords.longitude);
+      await saveCachedWeather(nextWeather);
+      setWeather(nextWeather);
+      setWeatherMessage('天气已更新');
+    } catch {
+      setWeatherMessage(cachedWeather ? '天气更新失败，显示最近一次天气。' : '天气暂时不可用。');
+    } finally {
+      setWeatherLoading(false);
+    }
+  }, []);
+
+  const loadNews = useCallback(async () => {
+    setNewsLoading(true);
+    const cachedNews = await getCachedNews();
+    const apiKey = await getNewsApiKey();
+    setHasNewsApiKey(Boolean(apiKey));
+
+    if (!apiKey) {
+      setNews([]);
+      setNewsMessage('暂未配置新闻 API Key。');
+      setNewsLoading(false);
+      return;
+    }
+
+    if (cachedNews.length > 0) {
+      setNews(cachedNews);
+      setNewsMessage('显示最近一次头条');
+    }
+
+    try {
+      const nextNews = await fetchTopNews();
+      setNews(nextNews);
+      setNewsMessage(nextNews.length > 0 ? '头条已更新' : '暂时没有头条');
+    } catch {
+      setNewsMessage(cachedNews.length > 0 ? '新闻更新失败，显示最近一次头条。' : '新闻暂时不可用。');
+    } finally {
+      setNewsLoading(false);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       void loadHome();
     }, [loadHome]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadWeather(false);
+    }, [loadWeather]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadNews();
+    }, [loadNews]),
   );
 
   const completedCount = useMemo(
@@ -263,6 +372,13 @@ export default function TodayScreen() {
               </View>
             </View>
 
+            <WeatherCard
+              loading={weatherLoading}
+              message={weatherMessage}
+              onRefresh={() => void loadWeather(true)}
+              weather={weather}
+            />
+
             <PrimaryButton
               onPress={() => {
                 void hapticLight();
@@ -276,12 +392,9 @@ export default function TodayScreen() {
 
             <View style={styles.secondaryGrid}>
               <SecondaryEntry label="手动添加" onPress={() => router.push('/task/new' as Href)} />
-              <SecondaryEntry label="Goals" onPress={() => router.push('/goals' as Href)} />
-              <SecondaryEntry label="??" onPress={() => router.push('/ledger' as Href)} />
-              <SecondaryEntry label="??" onPress={() => router.push('/meals' as Href)} />
-              <SecondaryEntry label="晚间复盘" onPress={() => router.push('/review' as Href)} />
               <SecondaryEntry label="历史记录" onPress={() => router.push('/history' as Href)} />
               <SecondaryEntry label="主题" onPress={() => router.push('/theme' as Href)} />
+              <SecondaryEntry label="设置" onPress={() => router.push('/settings' as Href)} />
             </View>
 
             {featuredGoal ? (
@@ -291,6 +404,17 @@ export default function TodayScreen() {
                 todayCheckIn={featuredGoalTodayCheckIn}
               />
             ) : null}
+
+            <NewsCard
+              articles={news}
+              expanded={newsExpanded}
+              hasApiKey={hasNewsApiKey}
+              loading={newsLoading}
+              message={newsMessage}
+              onConfigure={() => router.push('/settings' as Href)}
+              onRefresh={() => void loadNews()}
+              onToggleExpanded={() => setNewsExpanded((current) => !current)}
+            />
 
             <Text style={styles.whisper}>{'把今天切小一点，把注意力放亮一点。'}</Text>
 
@@ -398,10 +522,132 @@ function EmptyState() {
   );
 }
 
+function WeatherCard({
+  loading,
+  message,
+  onRefresh,
+  weather,
+}: {
+  loading: boolean;
+  message: string;
+  onRefresh: () => void;
+  weather?: WeatherSnapshot;
+}) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createWeatherStyles(theme), [theme]);
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.header}>
+        <View style={styles.copy}>
+          <Text style={styles.kicker}>WEATHER</Text>
+          <Text style={styles.title}>今日天气</Text>
+          <Text style={styles.message}>{weather ? getWeatherSuggestion(weather) : message}</Text>
+        </View>
+        <Pressable accessibilityRole="button" disabled={loading} onPress={onRefresh} style={({ pressed }) => [styles.refresh, pressed ? styles.pressed : undefined, loading ? styles.disabled : undefined]}>
+          <Text style={styles.refreshText}>{loading ? '更新中' : '刷新'}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.weatherRow}>
+        <Text style={styles.temperature}>{formatTemperature(weather?.temperature)}</Text>
+        <View style={styles.weatherMeta}>
+          <Text style={styles.weatherLabel}>{weather?.weatherLabel ?? '未获取'}</Text>
+          <Text style={styles.detail}>
+            {weather ? `高 ${formatTemperature(weather.maxTemperature)} / 低 ${formatTemperature(weather.minTemperature)}` : message}
+          </Text>
+        </View>
+      </View>
+
+      {weather ? (
+        <View style={styles.pillRow}>
+          <Text style={styles.pill}>体感 {formatTemperature(weather.apparentTemperature)}</Text>
+          <Text style={styles.pill}>降雨 {weather.precipitationProbability ?? 0}%</Text>
+          <Text style={styles.pill}>风 {Math.round(weather.windSpeed ?? 0)} km/h</Text>
+          <Text style={styles.updated}>更新 {formatWeatherUpdatedAt(weather.fetchedAt)}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function NewsCard({
+  articles,
+  expanded,
+  hasApiKey,
+  loading,
+  message,
+  onConfigure,
+  onRefresh,
+  onToggleExpanded,
+}: {
+  articles: NewsArticle[];
+  expanded: boolean;
+  hasApiKey: boolean;
+  loading: boolean;
+  message: string;
+  onConfigure: () => void;
+  onRefresh: () => void;
+  onToggleExpanded: () => void;
+}) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createNewsStyles(theme), [theme]);
+
+  const openArticle = useCallback((article: NewsArticle) => {
+    if (!article.url) return;
+    void hapticSelection();
+    void Linking.openURL(article.url).catch(() => {
+      Alert.alert('打不开新闻链接', '可以稍后再试。');
+    });
+  }, []);
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.header}>
+        <View style={styles.copy}>
+          <Text style={styles.kicker}>HEADLINES</Text>
+          <Text style={styles.title}>今日头条</Text>
+          <Text style={styles.message}>{message}</Text>
+        </View>
+        {hasApiKey ? (
+          <View style={styles.actions}>
+            <Pressable accessibilityRole="button" disabled={loading} onPress={onRefresh} style={({ pressed }) => [styles.action, pressed ? styles.pressed : undefined, loading ? styles.disabled : undefined]}>
+              <Text style={styles.actionText}>{loading ? '更新中' : '刷新'}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={onToggleExpanded} style={({ pressed }) => [styles.action, pressed ? styles.pressed : undefined]}>
+              <Text style={styles.actionText}>{expanded ? '收起' : '展开'}</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable accessibilityRole="button" onPress={onConfigure} style={({ pressed }) => [styles.action, pressed ? styles.pressed : undefined]}>
+            <Text style={styles.actionText}>设置 Key</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {hasApiKey && expanded ? (
+        <View style={styles.list}>
+          {articles.length === 0 ? (
+            <Text style={styles.empty}>还没有可显示的头条。</Text>
+          ) : articles.map((article) => (
+            <Pressable accessibilityRole="link" disabled={!article.url} key={article.id} onPress={() => openArticle(article)} style={({ pressed }) => [styles.article, pressed ? styles.pressed : undefined]}>
+              <Text numberOfLines={2} style={styles.articleTitle}>{article.title}</Text>
+              <Text numberOfLines={1} style={styles.articleMeta}>
+                {article.source || '新闻来源'}{article.publishedAt ? ` · ${new Date(article.publishedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 const secondaryStyles = StyleSheet.create({
   entry: {
     minHeight: 44,
-    minWidth: '23%',
+    flex: 1,
+    minWidth: '30%',
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.pill,
@@ -416,6 +662,119 @@ const secondaryStyles = StyleSheet.create({
     ...typography.caption,
   },
 });
+
+function createWeatherStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    card: {
+      borderColor: theme.border,
+      borderRadius: radius.large,
+      borderWidth: 1,
+      backgroundColor: theme.surface,
+      marginTop: spacing.md,
+      padding: spacing.md,
+      gap: spacing.sm,
+    },
+    header: {
+      alignItems: 'flex-start',
+      flexDirection: 'row',
+      gap: spacing.md,
+      justifyContent: 'space-between',
+    },
+    copy: {
+      flex: 1,
+      minWidth: 0,
+    },
+    kicker: { ...typography.micro, color: theme.primary, fontWeight: '900', marginBottom: spacing.xxs },
+    title: { ...typography.cardTitle, color: theme.text, fontWeight: '900' },
+    message: { ...typography.caption, color: theme.textMuted, lineHeight: 18, marginTop: spacing.xxs },
+    refresh: {
+      minHeight: 34,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderColor: theme.border,
+      borderRadius: radius.pill,
+      borderWidth: 1,
+      backgroundColor: theme.surfaceAlt,
+      paddingHorizontal: spacing.sm,
+    },
+    refreshText: { ...typography.caption, color: theme.primary, fontWeight: '900' },
+    pressed: { opacity: 0.76, transform: [{ scale: 0.985 }] },
+    disabled: { opacity: 0.52 },
+    weatherRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
+    temperature: { color: theme.primary, fontSize: 38, fontWeight: '900', lineHeight: 42 },
+    weatherMeta: { flex: 1, minWidth: 0 },
+    weatherLabel: { ...typography.body, color: theme.text, fontWeight: '900' },
+    detail: { ...typography.caption, color: theme.textMuted, marginTop: spacing.xxs },
+    pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+    pill: {
+      ...typography.micro,
+      overflow: 'hidden',
+      borderRadius: radius.pill,
+      backgroundColor: theme.surfaceAlt,
+      color: theme.textMuted,
+      fontWeight: '900',
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xxs,
+    },
+    updated: {
+      ...typography.micro,
+      color: theme.textMuted,
+      fontWeight: '900',
+      paddingVertical: spacing.xxs,
+    },
+  });
+}
+
+function createNewsStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    card: {
+      borderColor: theme.border,
+      borderRadius: radius.large,
+      borderWidth: 1,
+      backgroundColor: theme.surface,
+      marginTop: spacing.md,
+      padding: spacing.md,
+      gap: spacing.sm,
+    },
+    header: {
+      alignItems: 'flex-start',
+      flexDirection: 'row',
+      gap: spacing.md,
+      justifyContent: 'space-between',
+    },
+    copy: {
+      flex: 1,
+      minWidth: 0,
+    },
+    kicker: { ...typography.micro, color: theme.primary, fontWeight: '900', marginBottom: spacing.xxs },
+    title: { ...typography.cardTitle, color: theme.text, fontWeight: '900' },
+    message: { ...typography.caption, color: theme.textMuted, lineHeight: 18, marginTop: spacing.xxs },
+    actions: { flexDirection: 'row', gap: spacing.xs },
+    action: {
+      minHeight: 34,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderColor: theme.border,
+      borderRadius: radius.pill,
+      borderWidth: 1,
+      backgroundColor: theme.surfaceAlt,
+      paddingHorizontal: spacing.sm,
+    },
+    actionText: { ...typography.caption, color: theme.primary, fontWeight: '900' },
+    disabled: { opacity: 0.52 },
+    pressed: { opacity: 0.76, transform: [{ scale: 0.985 }] },
+    list: { gap: spacing.xs },
+    empty: { ...typography.caption, color: theme.textMuted, lineHeight: 18 },
+    article: {
+      borderRadius: radius.medium,
+      backgroundColor: theme.surfaceAlt,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    articleTitle: { ...typography.body, color: theme.text, fontWeight: '900', lineHeight: 20 },
+    articleMeta: { ...typography.micro, color: theme.textMuted, fontWeight: '900', marginTop: spacing.xxs },
+  });
+}
 
 const emptyStyles = StyleSheet.create({
   empty: {

@@ -84,7 +84,7 @@ export default function TaskDetailScreen() {
           <PrimaryButton onPress={markComplete} variant="soft">{'仅标记完成'}</PrimaryButton>
           <PrimaryButton onPress={markPartial} variant="quiet">{'标记部分完成'}</PrimaryButton>
         </View>
-        {task.completionCriteria ? <View style={styles.block}><Text style={styles.label}>????</Text><Text style={styles.body}>{task.completionCriteria}</Text></View> : null}
+        {task.completionCriteria ? <View style={styles.block}><Text style={styles.label}>完成标准</Text><Text style={styles.body}>{task.completionCriteria}</Text></View> : null}
 
         <View style={styles.grid}>
           <InfoItem label="预计时间" theme={theme} value={`${task.estimatedMinutes} 分钟`} />

@@ -32,7 +32,7 @@ export function ReviewTaskItem({ task, proof, onPress, onMoveToTomorrow, onMarkP
       <View style={styles.header}>
         <View style={styles.copy}>
           <Text style={styles.title} numberOfLines={2}>{task.title}</Text>
-          {task.completionCriteria ? <Text style={styles.criteria} numberOfLines={2}>?????{task.completionCriteria}</Text> : null}
+          {task.completionCriteria ? <Text style={styles.criteria} numberOfLines={2}>完成标准：{task.completionCriteria}</Text> : null}
         </View>
         {proofUri ? <View style={styles.thumbnailFrame}><Image source={{ uri: proofUri }} style={styles.thumbnail} /></View> : null}
       </View>

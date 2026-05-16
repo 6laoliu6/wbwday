@@ -135,7 +135,7 @@ export default function FocusScreen() {
           <View style={styles.geometryTwo} />
           <Text style={styles.kicker}>FOCUS CHAMBER</Text>
           <Text style={styles.title} numberOfLines={2}>{task.title}</Text>
-          {task.completionCriteria ? <Text style={styles.criteria} numberOfLines={2}>?????{task.completionCriteria}</Text> : null}
+          {task.completionCriteria ? <Text style={styles.criteria} numberOfLines={2}>完成标准：{task.completionCriteria}</Text> : null}
         </View>
 
         <View style={styles.timerPanel}>

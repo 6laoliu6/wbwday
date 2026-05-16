@@ -25,6 +25,14 @@ import { parsePlanningText } from '@/utils/parsePlanningText';
 const exampleText =
   '例如：今天我要写完报告初稿，至少 1500 字；下午健身 40 分钟；晚上整理房间，把桌面清空。';
 
+function appendRecognizedText(current: string, recognizedText: string): string {
+  const normalizedCurrent = current.trim();
+  const normalizedRecognizedText = recognizedText.trim();
+  if (!normalizedCurrent) return normalizedRecognizedText;
+  if (!normalizedRecognizedText) return current;
+  return `${normalizedCurrent}；${normalizedRecognizedText}`;
+}
+
 export default function MorningPlanScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -146,7 +154,9 @@ export default function MorningPlanScreen() {
           </View>
 
           <View style={styles.actionRow}>
-            <View style={styles.actionItem}><VoiceInputButton /></View>
+            <View style={styles.actionItem}>
+              <VoiceInputButton onTranscript={(text) => setInput((current) => appendRecognizedText(current, text))} />
+            </View>
             <View style={styles.actionItem}><PrimaryButton onPress={generateDrafts}>{'生成任务'}</PrimaryButton></View>
           </View>
 
